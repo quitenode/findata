@@ -603,7 +603,7 @@ def main():
     # English report
     print(f"[1/4] Generating English report...")
     report_en = generate_report()
-    en_md_path = os.path.join(day_dir, "report_en.md")
+    en_md_path = os.path.join(day_dir, f"{date_str}_prediction_en.md")
     with open(en_md_path, "w") as f:
         f.write(report_en)
     print(f"  Saved: {en_md_path}")
@@ -611,20 +611,20 @@ def main():
     # Chinese report
     print(f"[2/4] Generating Chinese report...")
     report_cn = generate_report_cn()
-    cn_md_path = os.path.join(day_dir, "report_cn.md")
+    cn_md_path = os.path.join(day_dir, f"{date_str}_prediction_cn.md")
     with open(cn_md_path, "w") as f:
         f.write(report_cn)
     print(f"  Saved: {cn_md_path}")
 
     # English PDF
     print(f"[3/4] Generating English PDF...")
-    en_pdf_path = os.path.join(day_dir, "report_en.pdf")
+    en_pdf_path = os.path.join(day_dir, f"{date_str}_prediction_en.pdf")
     if md_to_pdf(report_en, en_pdf_path):
         print(f"  Saved: {en_pdf_path}")
 
     # Chinese PDF
     print(f"[4/4] Generating Chinese PDF...")
-    cn_pdf_path = os.path.join(day_dir, "report_cn.pdf")
+    cn_pdf_path = os.path.join(day_dir, f"{date_str}_prediction_cn.pdf")
     if md_to_pdf(report_cn, cn_pdf_path):
         print(f"  Saved: {cn_pdf_path}")
 
