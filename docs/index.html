@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>findata Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .meta { color: var(--muted); font-size: 12px; }
+
+.container { max-width: 1280px; margin: 0 auto; padding: 20px; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+.tab { padding: 8px 16px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.card h3 { font-size: 13px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.ticker-card { text-align: center; }
+.ticker-card .price { font-size: 24px; font-weight: 700; margin: 4px 0; }
+.ticker-card .change { font-size: 14px; font-weight: 600; }
+.ticker-card .label { font-size: 11px; color: var(--muted); }
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+
+.chart-container { position: relative; height: 200px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+tr:hover { background: rgba(88,166,255,0.04); }
+
+.sector-bar { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.sector-bar .name { width: 100px; font-size: 12px; }
+.sector-bar .bar-wrap { flex: 1; height: 20px; background: var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+.sector-bar .bar { height: 100%; border-radius: 4px; min-width: 2px; }
+.sector-bar .val { width: 60px; text-align: right; font-size: 12px; font-weight: 600; }
+
+.reddit-post { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.reddit-post:last-child { border: none; }
+.reddit-post .title { font-size: 13px; }
+.reddit-post .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.reddit-post .score { font-weight: 700; margin-right: 6px; }
+.flair { display: inline-block; background: var(--border); padding: 1px 6px; border-radius: 10px; font-size: 10px; color: var(--muted); }
+
+.report-viewer { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px 32px; line-height: 1.7; }
+.report-viewer h1 { font-size: 22px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
+.report-viewer h2 { font-size: 17px; margin-top: 24px; color: var(--accent); }
+.report-viewer h3 { font-size: 14px; margin-top: 16px; }
+.report-viewer table { margin: 8px 0; }
+.report-viewer th { background: rgba(255,255,255,0.03); }
+.report-viewer strong { color: var(--yellow); }
+.report-viewer ul { padding-left: 20px; }
+.report-viewer li { margin: 4px 0; }
+.report-viewer em { color: var(--muted); font-size: 12px; }
+
+.lang-toggle { display: flex; gap: 2px; background: var(--border); border-radius: 6px; padding: 2px; margin-bottom: 16px; display: inline-flex; }
+.lang-btn { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); }
+.lang-btn.active { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>findata Dashboard</h1>
+  <div class="meta" id="lastUpdated">Loading...</div>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">Overview</div>
+    <div class="tab" data-tab="stocks">Stocks</div>
+    <div class="tab" data-tab="crypto">Crypto</div>
+    <div class="tab" data-tab="sentiment">Sentiment</div>
+    <div class="tab" data-tab="report">Report</div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="tab-content active" id="overview">
+    <div class="grid grid-4" id="indexCards"></div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card"><h3>SPY (30-Day)</h3><div class="chart-container"><canvas id="spyChart"></canvas></div></div>
+      <div class="card"><h3>BTC/USDT (30-Day)</h3><div class="chart-container"><canvas id="btcChart"></canvas></div></div>
+    </div>
+    <div class="grid grid-2" style="margin-top:16px">
+      <div class="card"><h3>Sector Performance (5-Day)</h3><div id="sectorBars"></div></div>
+      <div class="card"><h3>Commodities</h3><table id="commodityTable"><thead><tr><th>Asset</th><th>Price</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- STOCKS -->
+  <div class="tab-content" id="stocks">
+    <div class="card"><h3>Mega-Cap Stocks</h3>
+      <table id="megacapTable"><thead><tr><th>Ticker</th><th>Name</th><th>Price</th><th>Change</th><th>Market Cap</th><th>P/E</th><th>30d Chart</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- CRYPTO -->
+  <div class="tab-content" id="crypto">
+    <div class="grid grid-3" id="cryptoCards"></div>
+    <div class="grid grid-3" style="margin-top:16px" id="cryptoCharts"></div>
+  </div>
+
+  <!-- SENTIMENT -->
+  <div class="tab-content" id="sentiment">
+    <div class="grid grid-3" id="redditPanels"></div>
+  </div>
+
+  <!-- REPORT -->
+  <div class="tab-content" id="report">
+    <div class="lang-toggle">
+      <div class="lang-btn active" data-lang="en">English</div>
+      <div class="lang-btn" data-lang="cn">中文</div>
+    </div>
+    <div id="reportSelect" style="margin-bottom:16px"></div>
+    <div class="report-viewer" id="reportContent">Select a report to view</div>
+  </div>
+</div>
+
+<script>
+const REPO = 'michaelzhang-ai/findata';
+let DATA = {};
+
+function fmtNum(n) { if (n == null) return 'N/A'; if (Math.abs(n) >= 1e12) return `$${(n/1e12).toFixed(2)}T`; if (Math.abs(n) >= 1e9) return `$${(n/1e9).toFixed(0)}B`; if (Math.abs(n) >= 1e6) return `$${(n/1e6).toFixed(1)}M`; return `$${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`; }
+function fmtPct(n) { if (n == null) return 'N/A'; return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`; }
+function pctClass(n) { return n >= 0 ? 'positive' : 'negative'; }
+
+function sparkline(canvas, data, color) {
+  new Chart(canvas, { type: 'line', data: { labels: data.map((_,i)=>i), datasets: [{ data, borderColor: color, borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } } });
+}
+
+function lineChart(canvas, dates, data, label, color) {
+  new Chart(canvas, { type: 'line', data: { labels: dates, datasets: [{ label, data, borderColor: color, backgroundColor: color + '18', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b949e', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#21262d' } }, y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } } } } });
+}
+
+function renderOverview() {
+  const el = document.getElementById('indexCards');
+  el.innerHTML = DATA.indices.map(i => `<div class="card ticker-card"><div class="label">${i.ticker}</div><div class="price">${fmtNum(i.price)}</div><div class="change ${pctClass(i.change_pct)}">${fmtPct(i.change_pct)}</div></div>`).join('');
+
+  const spy = DATA.indices.find(i => i.ticker === 'SPY');
+  if (spy) lineChart(document.getElementById('spyChart'), spy.dates, spy.history, 'SPY', '#58a6ff');
+  const btc = DATA.crypto.find(c => c.symbol === 'BTC');
+  if (btc) lineChart(document.getElementById('btcChart'), btc.dates, btc.history, 'BTC', '#f7931a');
+
+  const sb = document.getElementById('sectorBars');
+  const maxAbs = Math.max(...DATA.sectors.map(s => Math.abs(s.ret_5d || 0)), 1);
+  sb.innerHTML = DATA.sectors.map(s => {
+    const w = Math.abs(s.ret_5d || 0) / maxAbs * 100;
+    const c = (s.ret_5d || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+    const dir = (s.ret_5d || 0) >= 0 ? 'left' : 'right';
+    return `<div class="sector-bar"><span class="name">${s.ticker} ${s.name}</span><div class="bar-wrap"><div class="bar" style="width:${w}%;background:${c};float:${dir}"></div></div><span class="val ${pctClass(s.ret_5d)}">${fmtPct(s.ret_5d)}</span></div>`;
+  }).join('');
+
+  const ct = document.querySelector('#commodityTable tbody');
+  ct.innerHTML = DATA.commodities.map(c => `<tr><td>${c.ticker} (${c.name})</td><td>${fmtNum(c.price)}</td><td class="${pctClass(c.ret_5d)}">${fmtPct(c.ret_5d)}</td></tr>`).join('');
+}
+
+function renderStocks() {
+  const tb = document.querySelector('#megacapTable tbody');
+  tb.innerHTML = DATA.megacaps.map((s, i) => {
+    const cid = `spark_${i}`;
+    return `<tr><td><strong>${s.ticker}</strong></td><td>${s.name}</td><td>${fmtNum(s.price)}</td><td class="${pctClass(s.change_pct)}">${fmtPct(s.change_pct)}</td><td>${fmtNum(s.market_cap)}</td><td>${s.pe ? s.pe.toFixed(1) : 'N/A'}</td><td style="width:120px"><canvas id="${cid}" height="30"></canvas></td></tr>`;
+  }).join('');
+  DATA.megacaps.forEach((s, i) => {
+    const c = document.getElementById(`spark_${i}`);
+    if (c && s.history) sparkline(c, s.history, s.change_pct >= 0 ? '#3fb950' : '#f85149');
+  });
+}
+
+function renderCrypto() {
+  const cc = document.getElementById('cryptoCards');
+  cc.innerHTML = DATA.crypto.map(c => `<div class="card ticker-card"><div class="label">${c.symbol}</div><div class="price">${fmtNum(c.price)}</div><div class="change ${pctClass(c.change_24h)}">24h: ${fmtPct(c.change_24h)}</div><div class="change ${pctClass(c.change_7d)}" style="font-size:12px">7d: ${fmtPct(c.change_7d)}</div><div class="label" style="margin-top:4px">MCap: ${fmtNum(c.market_cap)}</div></div>`).join('');
+
+  const ch = document.getElementById('cryptoCharts');
+  ch.innerHTML = DATA.crypto.map((c, i) => `<div class="card"><h3>${c.symbol} (30-Day)</h3><div class="chart-container"><canvas id="cc_${i}"></canvas></div></div>`).join('');
+  const colors = ['#f7931a', '#627eea', '#14f195'];
+  DATA.crypto.forEach((c, i) => { if (c.history) lineChart(document.getElementById(`cc_${i}`), c.dates, c.history, c.symbol, colors[i] || '#58a6ff'); });
+}
+
+function renderSentiment() {
+  const rp = document.getElementById('redditPanels');
+  rp.innerHTML = DATA.reddit.map(sub => {
+    const posts = sub.posts.map(p => `<div class="reddit-post"><div class="title"><span class="score ${p.score > 100 ? 'positive' : ''}">${p.score}</span>${p.title}${p.flair ? ` <span class="flair">${p.flair}</span>` : ''}</div><div class="meta">${p.comments} comments</div></div>`).join('');
+    const mentions = sub.ticker_mentions.length ? `<div style="margin-top:8px;font-size:11px;color:var(--muted)">Tickers: ${sub.ticker_mentions.map(t => `<strong style="color:var(--accent)">${t.ticker}</strong>(${t.count})`).join(', ')}</div>` : '';
+    return `<div class="card"><h3>r/${sub.subreddit}</h3>${posts}${mentions}</div>`;
+  }).join('');
+}
+
+let currentLang = 'en';
+function renderReport() {
+  const sel = document.getElementById('reportSelect');
+  if (!DATA.reports || !DATA.reports.length) { sel.innerHTML = '<em>No reports available</em>'; return; }
+  sel.innerHTML = `<select id="reportDate" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:6px 12px;border-radius:6px;font-size:13px">${DATA.reports.map(r => `<option value="${r.date}">${r.date}</option>`).join('')}</select>`;
+  document.getElementById('reportDate').addEventListener('change', () => loadReport());
+  loadReport();
+}
+
+async function loadReport() {
+  const date = document.getElementById('reportDate').value;
+  const suffix = currentLang === 'cn' ? 'cn' : 'en';
+  const filename = `${date}_prediction_${suffix}.md`;
+  const url = `predictions/${date}/${filename}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const md = await resp.text();
+    document.getElementById('reportContent').innerHTML = marked.parse(md);
+  } catch (e) {
+    document.getElementById('reportContent').innerHTML = `<p style="color:var(--muted)">Report not available: ${e.message}</p><p>Try: <a href="${url}">${url}</a></p>`;
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentLang = btn.dataset.lang;
+    loadReport();
+  });
+});
+
+fetch('data.json').then(r => r.json()).then(d => {
+  DATA = d;
+  document.getElementById('lastUpdated').textContent = `Last updated: ${d.generated}`;
+  renderOverview();
+  renderStocks();
+  renderCrypto();
+  renderSentiment();
+  renderReport();
+}).catch(e => { document.getElementById('lastUpdated').textContent = `Error loading data: ${e}`; });
+</script>
+</body>
+</html>
