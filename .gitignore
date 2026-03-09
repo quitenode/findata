@@ -17,8 +17,7 @@ findata-env/
 .DS_Store
 Thumbs.db
 
-# Predictions output (generated daily, keep local)
-predictions/*/
+# Predictions cron log
 predictions/cron.log
 
 # Secrets
