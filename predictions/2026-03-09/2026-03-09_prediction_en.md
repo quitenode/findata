@@ -1,6 +1,6 @@
 # Daily Market Prediction -- 2026-03-09 (Monday)
 
-Generated at 2026-03-09 00:04 UTC
+Generated at 2026-03-09 11:00 UTC
 
 ## US Equities
 
@@ -54,52 +54,52 @@ Generated at 2026-03-09 00:04 UTC
 
 | Coin | Price | 24h% | 7d% | 30d% | Signal |
 |------|-------|------|-----|------|--------|
-| BTC | $66,027.00 | -1.84% | 0.44% | -6.41% | **Bearish** |
-| ETH | $1,937.17 | -1.66% | -0.10% | -6.04% | **Bearish** |
-| SOL | $81.62 | -1.90% | -1.39% | -6.72% | **Bearish** |
+| BTC | $67,608.00 | -0.45% | 2.16% | -0.64% | **Lean Bearish** |
+| ETH | $1,994.40 | 1.10% | 2.39% | -0.84% | **Lean Bullish** |
+| SOL | $83.68 | -0.01% | -0.01% | -2.06% | **Bearish** |
 
 ### Trending Coins
 
-- #1 **Verified Emeralds** (VEREM) -- MCap Rank 510
+- #1 **Bittensor** (TAO) -- MCap Rank 45
 - #2 **Bitcoin** (BTC) -- MCap Rank 1
-- #3 **Pudgy Penguins** (PENGU) -- MCap Rank 108
-- #4 **Bittensor** (TAO) -- MCap Rank 45
-- #5 **Pi Network** (PI) -- MCap Rank 42
-- #6 **Ethereum** (ETH) -- MCap Rank 2
-- #7 **Solana** (SOL) -- MCap Rank 7
+- #3 **Lighter** (LIT) -- MCap Rank 148
+- #4 **Pi Network** (PI) -- MCap Rank 41
+- #5 **Solana** (SOL) -- MCap Rank 7
+- #6 **Hyperliquid** (HYPE) -- MCap Rank 16
+- #7 **Pudgy Penguins** (PENGU) -- MCap Rank 107
 
 ## Reddit Sentiment
 
 
 ### r/wallstreetbets -- Top Posts
 
-- [   54 pts] Weekly Earnings Thread 3/9 - 3/13 `Earnings Thread`
-- [  224 pts] What Are Your Moves Tomorrow, March 09, 2026 `Daily Discussion`
-- [ 1503 pts] Lord help us tommorow `Meme`
-- [ 1504 pts] Oil up 20% overnight `News`
-- [ 1008 pts] Crude Oil Futures Holders Be Like.... `Meme`
+- [   63 pts] Weekly Earnings Thread 3/9 - 3/13 `Earnings Thread`
+- [  343 pts] What Are Your Moves Tomorrow, March 09, 2026 `Daily Discussion`
+- [20483 pts] Lord help us tommorow `Meme`
+- [  931 pts] Dubai real estate index down 21% since the war `YOLO`
+- [ 4630 pts] Hope you degens are ready to buy `Discussion`
 
-Ticker mentions: **GM**(1), **EV**(1), **KBR**(1), **NFLX**(1)
+Ticker mentions: **GM**(1), **EV**(1), **USO**(1)
 
 ### r/stocks -- Top Posts
 
-- [    7 pts] Rate My Portfolio - r/Stocks Quarterly Thread March 2026
-- [   15 pts] /r/Stocks Weekend Discussion Saturday - Mar 07, 2026
-- [  553 pts] Oil prices hit $100 per barrel as big Middle East producers cut output amid Iran `Broad market news`
-- [  896 pts] Iraq Oil Output Plunges About 60% as Iran War Blocks Tankers `Broad market news`
-- [  108 pts] Is there a way to see if my late Dad owned stock? `Advice Request`
+- [    6 pts] Rate My Portfolio - r/Stocks Quarterly Thread March 2026
+- [   13 pts] /r/Stocks Weekend Discussion Saturday - Mar 07, 2026
+- [ 1406 pts] Oil prices hit $100 per barrel as big Middle East producers cut output amid Iran `Broad market news`
+- [  293 pts] WTI crude is up 24%
+- [ 1098 pts] Iraq Oil Output Plunges About 60% as Iran War Blocks Tankers `Broad market news`
 
-Ticker mentions: **NVDA**(1), **RAM**(1), **ITB**(1), **PBR**(1)
+Ticker mentions: **WTI**(1), **NVDA**(1), **RAM**(1), **PBR**(1)
 
 ### r/investing -- Top Posts
 
-- [    3 pts] Daily General Discussion and Advice Thread - March 08, 2026 `Daily Discussion`
-- [   44 pts] Investing and Trading Scam Reminder `r/investing`
-- [  390 pts] Oil prices will go insane next week
-- [  174 pts] Oil market prepares for $100 a barrel as Middle East producers cut output
-- [  191 pts] $7M public short on oil that was opened this weekend.
+- [    2 pts] Daily General Discussion and Advice Thread - March 09, 2026 `Daily Discussion`
+- [   46 pts] Investing and Trading Scam Reminder `r/investing`
+- [  414 pts] Thesis: It’s going to end badly for oil speculators.
+- [  460 pts] Oil market prepares for $100 a barrel as Middle East producers cut output
+- [   13 pts] I tested whether newspaper sentiment predicts stock returns in a frontier market
 
-Ticker mentions: **LNG**(1), **UAMY**(1), **AUM**(1)
+Ticker mentions: **LNG**(1)
 
 ## Prediction Summary
 
@@ -108,8 +108,8 @@ Ticker mentions: **LNG**(1), **UAMY**(1), **AUM**(1)
 | Asset | Tomorrow | Next Week | Key Levels |
 |-------|----------|-----------|------------|
 | SPY | Bearish | Bearish | Support: $672.38, Resist: $685.67 |
-| BTC | Bearish | Bearish | Support: $64,058, Resist: $67,406 |
-| ETH | Bearish | Bearish | Support: $1,852, Resist: $1,973 |
+| BTC | Lean Bearish | Lean Bearish | Support: $64,058, Resist: $67,480 |
+| ETH | Lean Bullish | Lean Bullish | Support: $1,852, Resist: $1,976 |
 
 ### Key Factors
 

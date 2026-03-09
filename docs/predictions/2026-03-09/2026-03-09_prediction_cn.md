@@ -1,6 +1,6 @@
 # 每日市场预测 -- 2026-03-09 (星期一)
 
-生成时间: 2026-03-09 00:04 UTC
+生成时间: 2026-03-09 11:00 UTC
 
 ## 美股市场
 
@@ -54,52 +54,52 @@
 
 | 币种 | 价格 | 24小时涨跌 | 7日涨跌 | 30日涨跌 | 信号 |
 |------|------|-----------|---------|----------|------|
-| BTC | $66,021.00 | -1.85% | 0.43% | -6.41% | **看跌** |
-| ETH | $1,937.17 | -1.66% | -0.10% | -6.04% | **看跌** |
-| SOL | $81.62 | -1.90% | -1.39% | -6.72% | **看跌** |
+| BTC | $67,608.00 | -0.45% | 2.16% | -0.64% | **偏空** |
+| ETH | $1,994.40 | 1.10% | 2.39% | -0.84% | **偏多** |
+| SOL | $83.68 | -0.01% | -0.01% | -2.06% | **看跌** |
 
 ### 热门币种
 
-- #1 **Verified Emeralds** (VEREM) -- 市值排名 510
+- #1 **Bittensor** (TAO) -- 市值排名 45
 - #2 **Bitcoin** (BTC) -- 市值排名 1
-- #3 **Pudgy Penguins** (PENGU) -- 市值排名 108
-- #4 **Bittensor** (TAO) -- 市值排名 45
-- #5 **Pi Network** (PI) -- 市值排名 42
-- #6 **Ethereum** (ETH) -- 市值排名 2
-- #7 **Solana** (SOL) -- 市值排名 7
+- #3 **Lighter** (LIT) -- 市值排名 148
+- #4 **Pi Network** (PI) -- 市值排名 41
+- #5 **Solana** (SOL) -- 市值排名 7
+- #6 **Hyperliquid** (HYPE) -- 市值排名 16
+- #7 **Pudgy Penguins** (PENGU) -- 市值排名 107
 
 ## Reddit 舆情
 
 
 ### r/wallstreetbets (华尔街赌场) -- 热门帖子
 
-- [   56 分] Weekly Earnings Thread 3/9 - 3/13 `Earnings Thread`
-- [  227 分] What Are Your Moves Tomorrow, March 09, 2026 `Daily Discussion`
-- [ 1538 分] Lord help us tommorow `Meme`
-- [ 1510 分] Oil up 20% overnight `News`
-- [ 1010 分] Crude Oil Futures Holders Be Like.... `Meme`
+- [   66 分] Weekly Earnings Thread 3/9 - 3/13 `Earnings Thread`
+- [  338 分] What Are Your Moves Tomorrow, March 09, 2026 `Daily Discussion`
+- [20493 分] Lord help us tommorow `Meme`
+- [  955 分] Dubai real estate index down 21% since the war `YOLO`
+- [ 4631 分] Hope you degens are ready to buy `Discussion`
 
-提及股票: **GM**(1), **EV**(1), **KBR**(1), **NFLX**(1)
+提及股票: **GM**(1), **EV**(1), **USO**(1)
 
 ### r/stocks (股票) -- 热门帖子
 
-- [    7 分] Rate My Portfolio - r/Stocks Quarterly Thread March 2026
-- [   14 分] /r/Stocks Weekend Discussion Saturday - Mar 07, 2026
-- [  552 分] Oil prices hit $100 per barrel as big Middle East producers cut output amid Iran `Broad market news`
-- [  892 分] Iraq Oil Output Plunges About 60% as Iran War Blocks Tankers `Broad market news`
-- [  109 分] Is there a way to see if my late Dad owned stock? `Advice Request`
+- [    8 分] Rate My Portfolio - r/Stocks Quarterly Thread March 2026
+- [   16 分] /r/Stocks Weekend Discussion Saturday - Mar 07, 2026
+- [ 1409 分] Oil prices hit $100 per barrel as big Middle East producers cut output amid Iran `Broad market news`
+- [  296 分] WTI crude is up 24%
+- [ 1104 分] Iraq Oil Output Plunges About 60% as Iran War Blocks Tankers `Broad market news`
 
-提及股票: **NVDA**(1), **RAM**(1), **ITB**(1), **PBR**(1)
+提及股票: **WTI**(1), **NVDA**(1), **RAM**(1), **PBR**(1)
 
 ### r/investing (投资) -- 热门帖子
 
-- [    3 分] Daily General Discussion and Advice Thread - March 08, 2026 `Daily Discussion`
-- [   45 分] Investing and Trading Scam Reminder `r/investing`
-- [  391 分] Oil prices will go insane next week
-- [  175 分] Oil market prepares for $100 a barrel as Middle East producers cut output
-- [  197 分] $7M public short on oil that was opened this weekend.
+- [    3 分] Daily General Discussion and Advice Thread - March 09, 2026 `Daily Discussion`
+- [   46 分] Investing and Trading Scam Reminder `r/investing`
+- [  415 分] Thesis: It’s going to end badly for oil speculators.
+- [  457 分] Oil market prepares for $100 a barrel as Middle East producers cut output
+- [   13 分] I tested whether newspaper sentiment predicts stock returns in a frontier market
 
-提及股票: **LNG**(1), **UAMY**(1), **AUM**(1)
+提及股票: **LNG**(1)
 
 ## 预测总结
 
@@ -108,8 +108,8 @@
 | 资产 | 明日预测 | 下周预测 | 关键价位 |
 |------|---------|---------|---------|
 | SPY | 看跌 | 看跌 | 支撑: $672.38, 阻力: $685.67 |
-| BTC | 看跌 | 看跌 | 支撑: $64,058, 阻力: $67,408 |
-| ETH | 看跌 | 看跌 | 支撑: $1,852, 阻力: $1,974 |
+| BTC | 偏空 | 偏空 | 支撑: $64,058, 阻力: $67,481 |
+| ETH | 偏多 | 偏多 | 支撑: $1,852, 阻力: $1,976 |
 
 ### 关键因素
 
