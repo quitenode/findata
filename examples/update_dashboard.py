@@ -6,8 +6,11 @@ import os
 import json
 import shutil
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+PT = ZoneInfo("America/Los_Angeles")
 
 REPO_DIR = os.path.join(os.path.dirname(__file__), "..")
 DOCS_DIR = os.path.join(REPO_DIR, "docs")
@@ -18,8 +21,8 @@ from findata import us_stocks, crypto, reddit_sentiment as reddit
 
 def generate_data_json():
     data = {
-        "generated": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-        "date": datetime.utcnow().strftime("%Y-%m-%d"),
+        "generated": datetime.now(PT).strftime("%Y-%m-%d %H:%M %Z"),
+        "date": datetime.now(PT).strftime("%Y-%m-%d"),
     }
 
     indices = []

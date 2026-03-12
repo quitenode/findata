@@ -206,6 +206,23 @@ export FMP_API_KEY="your_key"
 
 Add to `~/.bashrc` to persist across sessions.
 
+## Dashboard
+
+Live dashboard: **https://michaelzhang-ai.github.io/findata/**
+
+- Live price ticker (BTC, ETH, SOL, SPY, QQQ, NVDA) -- updates every 30 seconds
+- Charts, sector heatmap, Reddit sentiment
+- Daily prediction reports (EN/CN toggle)
+
+### Automation (GitHub Actions)
+
+| Workflow | Schedule | What it does |
+|---|---|---|
+| **Daily Prediction** | 6:30 AM PT, Mon-Fri | Full report (EN/CN markdown + PDF), updates dashboard |
+| **Data Refresh** | Every 15 min during market hours | Updates `data.json` for the dashboard |
+
+All times are Pacific Time. Reports are saved to `predictions/YYYY-MM-DD/`.
+
 ## Notes
 
 - The crypto module defaults to **OKX** as the exchange. Pass `exchange="bybit"` or `exchange="kraken"` to use others. Binance may be geo-blocked depending on location.

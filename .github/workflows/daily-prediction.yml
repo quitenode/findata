@@ -1,0 +1,36 @@
+name: Daily Prediction
+
+on:
+  schedule:
+    - cron: '30 14 * * 1-5'  # 6:30 AM PT = 14:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install yfinance edgartools requests pandas ccxt pycoingecko markdown weasyprint
+
+      - name: Generate prediction reports
+        run: python examples/daily_prediction.py predictions/
+
+      - name: Update dashboard data
+        run: python examples/update_dashboard.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add predictions/ docs/
+          git commit -m "prediction: $(TZ=America/Los_Angeles date +%Y-%m-%d) daily report" || exit 0
+          git push

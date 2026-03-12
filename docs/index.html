@@ -81,9 +81,28 @@ tr:hover { background: rgba(88,166,255,0.04); }
 .lang-toggle { display: flex; gap: 2px; background: var(--border); border-radius: 6px; padding: 2px; margin-bottom: 16px; display: inline-flex; }
 .lang-btn { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); }
 .lang-btn.active { background: var(--accent); color: #fff; }
+
+.live-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 6px 24px; display: flex; align-items: center; gap: 20px; overflow-x: auto; font-size: 13px; }
+.live-bar .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s infinite; flex-shrink: 0; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.live-bar .live-label { color: var(--green); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+.live-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.live-item .sym { color: var(--muted); font-weight: 600; font-size: 11px; }
+.live-item .lprice { font-weight: 700; font-size: 13px; transition: color 0.3s; }
+.live-item .lchange { font-size: 11px; font-weight: 600; }
+.live-item .flash-up { color: var(--green) !important; }
+.live-item .flash-down { color: var(--red) !important; }
+.live-bar .live-time { margin-left: auto; color: var(--muted); font-size: 10px; flex-shrink: 0; }
 </style>
 </head>
 <body>
+
+<div class="live-bar" id="liveBar">
+  <span class="live-dot"></span>
+  <span class="live-label">Live</span>
+  <div id="liveItems">Loading...</div>
+  <span class="live-time" id="liveTime"></span>
+</div>
 
 <div class="header">
   <h1>findata Dashboard</h1>
@@ -254,13 +273,90 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
 
 fetch('data.json').then(r => r.json()).then(d => {
   DATA = d;
-  document.getElementById('lastUpdated').textContent = `Last updated: ${d.generated}`;
+  document.getElementById('lastUpdated').textContent = `Data snapshot: ${d.generated}`;
   renderOverview();
   renderStocks();
   renderCrypto();
   renderSentiment();
   renderReport();
 }).catch(e => { document.getElementById('lastUpdated').textContent = `Error loading data: ${e}`; });
+
+// --- Live Ticker ---
+const LIVE_CRYPTO_IDS = 'bitcoin,ethereum,solana';
+const LIVE_STOCK_SYMBOLS = ['SPY', 'QQQ', 'NVDA'];
+let prevPrices = {};
+
+function flashPrice(el, direction) {
+  const cls = direction === 'up' ? 'flash-up' : 'flash-down';
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 1500);
+}
+
+async function fetchLiveCrypto() {
+  try {
+    const resp = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${LIVE_CRYPTO_IDS}&vs_currencies=usd&include_24hr_change=true`);
+    const data = await resp.json();
+    return Object.entries(data).map(([id, d]) => ({
+      sym: {bitcoin:'BTC',ethereum:'ETH',solana:'SOL'}[id] || id.toUpperCase(),
+      price: d.usd,
+      change: d.usd_24h_change,
+    }));
+  } catch { return []; }
+}
+
+async function fetchLiveStocks() {
+  const results = [];
+  for (const sym of LIVE_STOCK_SYMBOLS) {
+    try {
+      const resp = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`);
+      const data = await resp.json();
+      const meta = data.chart.result[0].meta;
+      const price = meta.regularMarketPrice;
+      const prevClose = meta.chartPreviousClose || meta.previousClose;
+      const change = prevClose ? ((price - prevClose) / prevClose) * 100 : null;
+      results.push({ sym, price, change });
+    } catch {
+      // Yahoo Finance may block from GitHub Pages; fall back to data.json
+      const idx = DATA.indices?.find(i => i.ticker === sym) || DATA.megacaps?.find(m => m.ticker === sym);
+      if (idx) results.push({ sym, price: idx.price, change: idx.change_pct });
+    }
+  }
+  return results;
+}
+
+function renderLiveTicker(items) {
+  const el = document.getElementById('liveItems');
+  el.innerHTML = items.map(item => {
+    const prev = prevPrices[item.sym];
+    const direction = prev && item.price !== prev ? (item.price > prev ? 'up' : 'down') : null;
+    prevPrices[item.sym] = item.price;
+    const priceStr = item.price >= 1000 ? `$${item.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : (item.price >= 1 ? `$${item.price.toFixed(2)}` : `$${item.price.toFixed(4)}`);
+    const changeStr = item.change != null ? `${item.change >= 0 ? '+' : ''}${item.change.toFixed(2)}%` : '';
+    const changeClass = item.change >= 0 ? 'positive' : 'negative';
+    return `<div class="live-item"><span class="sym">${item.sym}</span><span class="lprice" id="lp_${item.sym}">${priceStr}</span><span class="lchange ${changeClass}">${changeStr}</span></div>`;
+  }).join('');
+
+  items.forEach(item => {
+    const prev = prevPrices['_prev_' + item.sym];
+    if (prev && prev !== item.price) {
+      const el = document.getElementById(`lp_${item.sym}`);
+      if (el) flashPrice(el, item.price > prev ? 'up' : 'down');
+    }
+    prevPrices['_prev_' + item.sym] = item.price;
+  });
+
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
+}
+
+async function refreshLiveTicker() {
+  const [crypto, stocks] = await Promise.all([fetchLiveCrypto(), fetchLiveStocks()]);
+  const all = [...stocks, ...crypto];
+  if (all.length > 0) renderLiveTicker(all);
+}
+
+refreshLiveTicker();
+setInterval(refreshLiveTicker, 30000);
 </script>
 </body>
 </html>

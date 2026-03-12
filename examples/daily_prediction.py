@@ -18,12 +18,14 @@ Usage:
 import sys
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pandas as pd
 from findata import us_stocks, crypto, reddit_sentiment as reddit
 
+PT = ZoneInfo("America/Los_Angeles")
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "predictions")
 
@@ -141,10 +143,10 @@ def fmt(val, decimals=2, prefix="", suffix=""):
 
 
 def generate_report() -> str:
-    now = datetime.utcnow()
+    now = datetime.now(PT)
     lines = []
     lines.append(f"# Daily Market Prediction -- {now.strftime('%Y-%m-%d (%A)')}")
-    lines.append(f"\nGenerated at {now.strftime('%Y-%m-%d %H:%M UTC')}\n")
+    lines.append(f"\nGenerated at {now.strftime('%Y-%m-%d %H:%M %Z')}\n")
 
     # ---- US EQUITIES ----
     lines.append("## US Equities\n")
@@ -335,11 +337,11 @@ def translate_signal(sig: str) -> str:
 
 def generate_report_cn() -> str:
     """Generate Chinese version of the report."""
-    now = datetime.utcnow()
+    now = datetime.now(PT)
     weekday = WEEKDAY_CN[now.weekday()]
     lines = []
     lines.append(f"# 每日市场预测 -- {now.strftime('%Y-%m-%d')} ({weekday})")
-    lines.append(f"\n生成时间: {now.strftime('%Y-%m-%d %H:%M UTC')}\n")
+    lines.append(f"\n生成时间: {now.strftime('%Y-%m-%d %H:%M')} 太平洋时间\n")
 
     # ---- 美股 ----
     lines.append("## 美股市场\n")
@@ -596,7 +598,7 @@ def md_to_pdf(md_text: str, pdf_path: str) -> bool:
 def main():
     output_dir = sys.argv[1] if len(sys.argv) > 1 else OUTPUT_DIR
 
-    date_str = datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = datetime.now(PT).strftime("%Y-%m-%d")
     day_dir = os.path.join(output_dir, date_str)
     os.makedirs(day_dir, exist_ok=True)
 
