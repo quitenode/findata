@@ -34,3 +34,10 @@ jobs:
           git add predictions/ docs/
           git commit -m "prediction: $(TZ=America/Los_Angeles date +%Y-%m-%d) daily report" || exit 0
           git push
+
+      - name: Send to Telegram
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python examples/send_telegram.py
