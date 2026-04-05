@@ -204,6 +204,23 @@ function normalizeSnapshot(raw) {
   };
 }
 
+/** Python's json encoder can emit NaN/Infinity; browser JSON.parse rejects them. */
+function parseDashboardJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch (e0) {
+    try {
+      const fixed = text
+        .replace(/(?<=[\[,:\s])NaN(?=[\],}\s,])/g, 'null')
+        .replace(/(?<=[\[,:\s])Infinity(?=[\],}\s,])/g, 'null')
+        .replace(/(?<=[\[,:\s])-Infinity(?=[\],}\s,])/g, 'null');
+      return JSON.parse(fixed);
+    } catch {
+      throw e0;
+    }
+  }
+}
+
 function mkChart(el, labels, data, color) {
   try {
     if (typeof Chart === 'undefined' || !el || !labels || !data || !data.length) return;
@@ -320,8 +337,9 @@ document.querySelectorAll('.lang-btn').forEach(b => b.addEventListener('click', 
 // LOAD DATA (no-store avoids stale empty snapshots from browser disk cache)
 fetch('data.json', { cache: 'no-store' }).then(r => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}).then(d => {
+  return r.text();
+}).then(text => {
+  const d = parseDashboardJson(text);
   DATA = normalizeSnapshot(d);
   document.getElementById('snapTime').textContent = DATA.generated;
   try { renderMarkets(); } catch (e) { console.error(e); }

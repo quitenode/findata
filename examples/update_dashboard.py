@@ -4,6 +4,7 @@
 import sys
 import os
 import json
+import math
 import shutil
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -19,6 +20,34 @@ PRED_DIR = os.path.join(REPO_DIR, "predictions")
 from findata import us_stocks, crypto, reddit_sentiment as reddit
 
 DATA_JSON_PATH = os.path.join(DOCS_DIR, "data.json")
+
+
+def sanitize_for_json(obj):
+    """Make data RFC 8259–safe: Python json allows NaN/Infinity but browser JSON.parse does not."""
+    if obj is None or isinstance(obj, str):
+        return obj
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, int) and not isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(x) for x in obj]
+    try:
+        import numpy as np
+
+        if isinstance(obj, np.ndarray):
+            return sanitize_for_json(obj.tolist())
+        if isinstance(obj, np.generic):
+            return sanitize_for_json(obj.item())
+    except ImportError:
+        pass
+    return obj
 
 
 def generate_data_json():
@@ -169,9 +198,10 @@ def main():
             print("ERROR: No equity data and no existing data.json to fall back on.", file=sys.stderr)
             sys.exit(1)
     else:
+        clean = sanitize_for_json(data)
         with open(DATA_JSON_PATH, "w") as f:
-            json.dump(data, f)
-        print(f"  data.json: {len(json.dumps(data))} bytes")
+            json.dump(clean, f, allow_nan=False)
+        print(f"  data.json: {len(json.dumps(clean, allow_nan=False))} bytes")
 
     print("Syncing predictions to docs/...")
     sync_predictions_to_docs()
