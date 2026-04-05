@@ -180,6 +180,16 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .cs-verdict .cs-desc { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
 .cs-meter { height: 10px; border-radius: 5px; background: linear-gradient(to right, var(--red) 0%, var(--yellow) 50%, var(--green) 100%); position: relative; margin: 12px 0 4px; }
 .cs-meter .cs-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text); background: var(--surface); position: absolute; top: -3px; transform: translateX(-50%); }
+
+/* Market sentiment gauges */
+.sent-row { display: flex; flex-direction: column; gap: 14px; }
+.sent-item { background: var(--surface2); border-radius: 8px; padding: 12px 14px; }
+.sent-item .sent-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.sent-item .sent-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.sent-item .sent-val { font-size: 20px; font-weight: 800; }
+.sent-item .sent-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.sent-bar { height: 8px; border-radius: 4px; position: relative; margin-top: 6px; }
+.sent-bar .sent-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--text); background: var(--surface); position: absolute; top: -2px; transform: translateX(-50%); }
 </style>
 </head>
 <body>
@@ -212,6 +222,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
       <div class="card"><div class="card-title">Commodities & Safe Havens</div><table id="cmdtyTable"><thead><tr><th>Asset</th><th>Price</th><th>Chg</th><th>1d%</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="right-col">
+      <div class="card" id="mktSentimentCard"><div class="card-title">Market Sentiment</div><div id="mktSentiment"></div></div>
       <div class="card"><div class="card-title">Sector Heatmap <span style="font-size:10px;color:var(--muted);text-transform:none;font-weight:400">(5-day)</span></div><div id="sectorBars"></div></div>
       <div class="card"><div class="card-title"><span class="badge">LIVE</span> Reddit Buzz</div><div id="sideNews"></div></div>
       <div class="card"><div class="card-title">Trending Tickers</div><div class="trend-row" id="trendTickers"></div></div>
@@ -441,6 +452,93 @@ function renderMarkets() {
   DATA.reddit.forEach(s => (s.ticker_mentions || []).forEach(t => { allMentions[t.ticker] = (allMentions[t.ticker]||0) + t.count; }));
   const sorted = Object.entries(allMentions).sort((a,b)=>b[1]-a[1]).slice(0,12);
   document.getElementById('trendTickers').innerHTML = sorted.map(([t,c]) => `<span class="trend-tag">${t} <span style="color:var(--muted);font-weight:400">${c}</span></span>`).join('');
+
+  renderMarketSentiment();
+}
+
+// -- MARKET SENTIMENT (VIX + Fear & Greed + Market Breadth) --
+async function renderMarketSentiment() {
+  const el = document.getElementById('mktSentiment');
+  const items = [];
+
+  // VIX from data.json
+  const vix = DATA.indices.find(i => (i.name||'').includes('VIX'));
+  if (vix && vix.price != null) {
+    const v = vix.price;
+    const chg = vix.change_pts;
+    const vixLevel = v < 15 ? 'Low (Complacent)' : (v < 20 ? 'Normal' : (v < 30 ? 'Elevated' : (v < 40 ? 'High (Fear)' : 'Extreme Fear')));
+    const vixCls = v < 15 ? 'up' : (v < 20 ? '' : (v < 30 ? 'down' : 'down'));
+    const pct = Math.min(100, Math.max(0, (v / 50) * 100));
+    items.push(`
+      <div class="sent-item">
+        <div class="sent-header"><span class="sent-label">VIX (Volatility Index)</span><span class="sent-val ${vixCls}">${v.toFixed(2)}</span></div>
+        <div class="sent-bar" style="background:linear-gradient(to right, var(--green), var(--yellow), var(--red))"><div class="sent-marker" style="left:${pct}%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>Calm</span><span>Fear</span><span>Panic</span></div>
+        <div class="sent-sub">${vixLevel}${chg!=null?' · '+(chg>=0?'+':'')+chg.toFixed(2)+' pts':''}</div>
+      </div>
+    `);
+  }
+
+  // Crypto Fear & Greed (live from alternative.me — CORS allowed)
+  try {
+    const r = await fetch('https://api.alternative.me/fng/?limit=2');
+    const d = await r.json();
+    const cur = d.data[0];
+    const prev = d.data[1];
+    const val = parseInt(cur.value);
+    const pct = val;
+    const fgCls = val < 25 ? 'down' : (val > 75 ? 'up' : '');
+    items.push(`
+      <div class="sent-item">
+        <div class="sent-header"><span class="sent-label">Crypto Fear & Greed</span><span class="sent-val ${fgCls}">${val}</span></div>
+        <div class="sent-bar" style="background:linear-gradient(to right, var(--red), var(--yellow), var(--green))"><div class="sent-marker" style="left:${pct}%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>Extreme Fear</span><span>Neutral</span><span>Extreme Greed</span></div>
+        <div class="sent-sub">${cur.value_classification}${prev?' · Yesterday: '+prev.value:''}</div>
+      </div>
+    `);
+  } catch (e) { console.warn('F&G', e); }
+
+  // Market breadth from all_stocks data (% above SMA50, bullish vs bearish)
+  const stocks = DATA.all_stocks || [];
+  if (stocks.length > 10) {
+    let aboveSma50 = 0, bullish = 0, bearish = 0, total = 0;
+    stocks.forEach(s => {
+      const t = s.technicals;
+      if (!t) return;
+      total++;
+      if (t.sma50 && t.sma50.signal === 'bullish') aboveSma50++;
+      const ov = t.overall;
+      if (ov) { if (ov.score >= 1) bullish++; else if (ov.score <= -1) bearish++; }
+    });
+    const breadthPct = total ? Math.round(aboveSma50 / total * 100) : 50;
+    const breadthCls = breadthPct > 60 ? 'up' : (breadthPct < 40 ? 'down' : '');
+    const bullPct = total ? Math.round(bullish / total * 100) : 0;
+    const bearPct = total ? Math.round(bearish / total * 100) : 0;
+    items.push(`
+      <div class="sent-item">
+        <div class="sent-header"><span class="sent-label">Market Breadth (S&P 500)</span><span class="sent-val ${breadthCls}">${breadthPct}%</span></div>
+        <div class="sent-bar" style="background:linear-gradient(to right, var(--red), var(--yellow), var(--green))"><div class="sent-marker" style="left:${breadthPct}%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted)"><span>Weak</span><span>Neutral</span><span>Strong</span></div>
+        <div class="sent-sub">${aboveSma50}/${total} above SMA50 · ${bullPct}% bullish · ${bearPct}% bearish</div>
+      </div>
+    `);
+  }
+
+  // Put-Call Ratio estimate from VIX (heuristic: VIX correlates with put/call)
+  if (vix && vix.price != null) {
+    const v = vix.price;
+    const pcr = v < 15 ? 0.7 : (v < 20 ? 0.85 : (v < 25 ? 1.0 : (v < 30 ? 1.15 : 1.3)));
+    const pcrCls = pcr > 1.1 ? 'down' : (pcr < 0.8 ? 'up' : '');
+    const pcrLabel = pcr > 1.1 ? 'Bearish (high put demand)' : (pcr < 0.8 ? 'Bullish (low hedging)' : 'Neutral');
+    items.push(`
+      <div class="sent-item">
+        <div class="sent-header"><span class="sent-label">Put/Call Ratio (est.)</span><span class="sent-val ${pcrCls}">${pcr.toFixed(2)}</span></div>
+        <div class="sent-sub">${pcrLabel}</div>
+      </div>
+    `);
+  }
+
+  el.innerHTML = items.length ? `<div class="sent-row">${items.join('')}</div>` : '<p style="color:var(--muted)">No sentiment data</p>';
 }
 
 // -- STOCKS (TradingView full chart) --
