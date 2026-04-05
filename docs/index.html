@@ -121,6 +121,15 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .report-body ul { padding-left: 18px; }
 .report-body li { margin: 3px 0; }
 .report-body em { color: var(--muted); font-size: 12px; }
+
+/* Stock viewer */
+#stockSearchInput:focus { border-color: var(--accent); }
+.quick-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; transition: all 0.15s; }
+.quick-chip:hover { border-color: var(--accent); color: var(--accent); }
+.quick-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.stock-stat { display: inline-flex; flex-direction: column; gap: 2px; min-width: 100px; }
+.stock-stat .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.stock-stat .stat-val { font-size: 14px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -162,7 +171,24 @@ tr:hover { background: rgba(59,130,246,0.04); }
 
 <!-- STOCKS PAGE -->
 <div class="page" id="stocks">
-  <div class="card"><div class="card-title">Mega-Cap Stocks — Detail</div><table id="stocksDetailTable"><thead><tr><th>Ticker</th><th>Name</th><th>Price</th><th>Change</th><th>Market Cap</th><th>P/E</th><th>30d Chart</th></tr></thead><tbody></tbody></table></div>
+  <!-- Search bar -->
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+    <div style="position:relative;flex:1;max-width:400px">
+      <input type="text" id="stockSearchInput" placeholder="Search ticker (AAPL, MSFT, TSLA...)" spellcheck="false" autocomplete="off"
+        style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);padding:10px 14px 10px 36px;border-radius:8px;font-size:14px;outline:none;">
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px">&#128269;</span>
+    </div>
+    <div id="stockQuickPicks" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  </div>
+  <!-- TradingView chart -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div id="stockChartHeader" style="padding:14px 16px 0 16px"></div>
+    <div id="tvChartContainer" style="height:520px"></div>
+  </div>
+  <!-- Quote info -->
+  <div id="stockInfoPanel" class="card" style="display:none;margin-top:16px"></div>
+  <!-- Mega-cap table -->
+  <div class="card" style="margin-top:16px"><div class="card-title">Mega-Cap Stocks</div><table id="stocksDetailTable"><thead><tr><th>Ticker</th><th>Name</th><th>Price</th><th>Change</th><th>Market Cap</th><th>P/E</th><th>30d Chart</th></tr></thead><tbody></tbody></table></div>
 </div>
 
 <!-- CRYPTO PAGE -->
@@ -341,10 +367,156 @@ function renderMarkets() {
   document.getElementById('trendTickers').innerHTML = sorted.map(([t,c]) => `<span class="trend-tag">${t} <span style="color:var(--muted);font-weight:400">${c}</span></span>`).join('');
 }
 
-// -- STOCKS --
+// -- STOCKS (TradingView full chart) --
+let currentStockTicker = 'AAPL';
+let tvWidget = null;
+
+const QUICK_TICKERS = ['AAPL','NVDA','MSFT','GOOGL','AMZN','META','TSLA','AMD','NFLX','JPM'];
+
 function renderStocks() {
-  document.querySelector('#stocksDetailTable tbody').innerHTML = DATA.megacaps.map((s,i) => `<tr><td><strong>${s.ticker}</strong></td><td>${s.name}</td><td>${fN(s.price)}</td><td class="${cls(s.change_pct)}">${fP(s.change_pct)}</td><td>${fN(s.market_cap)}</td><td>${s.pe?s.pe.toFixed(1):'—'}</td><td style="width:120px"><canvas id="sd_${i}" height="28"></canvas></td></tr>`).join('');
+  // Mega-cap table (kept below)
+  document.querySelector('#stocksDetailTable tbody').innerHTML = DATA.megacaps.map((s,i) => `<tr style="cursor:pointer" data-ticker="${s.ticker}"><td><strong>${s.ticker}</strong></td><td>${s.name}</td><td>${fN(s.price)}</td><td class="${cls(s.change_pct)}">${fP(s.change_pct)}</td><td>${fN(s.market_cap)}</td><td>${s.pe?s.pe.toFixed(1):'—'}</td><td style="width:120px"><canvas id="sd_${i}" height="28"></canvas></td></tr>`).join('');
   DATA.megacaps.forEach((s,i) => { const c=document.getElementById(`sd_${i}`); if(c&&s.history) spark(c,s.history,s.change_pct>=0?'#22c55e':'#ef4444'); });
+
+  // Click row to load chart
+  document.querySelectorAll('#stocksDetailTable tbody tr').forEach(r => {
+    r.addEventListener('click', () => loadStockChart(r.dataset.ticker));
+  });
+
+  // Quick-pick chips
+  document.getElementById('stockQuickPicks').innerHTML = QUICK_TICKERS.map(t =>
+    `<div class="quick-chip" data-t="${t}">${t}</div>`
+  ).join('');
+  document.querySelectorAll('.quick-chip').forEach(c => c.addEventListener('click', () => loadStockChart(c.dataset.t)));
+
+  // Search input
+  const input = document.getElementById('stockSearchInput');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const val = input.value.trim().toUpperCase();
+      if (val) loadStockChart(val);
+    }
+  });
+
+  // Load default
+  loadStockChart(currentStockTicker);
+}
+
+function loadStockChart(ticker) {
+  ticker = ticker.toUpperCase().replace(/[^A-Z0-9.\-^]/g, '');
+  if (!ticker) return;
+  currentStockTicker = ticker;
+
+  // Update URL
+  const hash = `#stocks/${ticker}`;
+  if (location.hash !== hash) history.pushState(null, '', hash);
+
+  // Update input
+  document.getElementById('stockSearchInput').value = ticker;
+
+  // Highlight active chip
+  document.querySelectorAll('.quick-chip').forEach(c => c.classList.toggle('active', c.dataset.t === ticker));
+
+  // Load TradingView widget
+  renderTVChart(ticker);
+
+  // Fetch quote data from Yahoo
+  fetchStockQuote(ticker);
+}
+
+function renderTVChart(ticker) {
+  const container = document.getElementById('tvChartContainer');
+  container.innerHTML = '';
+
+  const widgetDiv = document.createElement('div');
+  widgetDiv.className = 'tradingview-widget-container';
+  widgetDiv.style.height = '100%';
+  widgetDiv.innerHTML = '<div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>';
+  container.appendChild(widgetDiv);
+
+  const script = document.createElement('script');
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.async = true;
+  script.textContent = JSON.stringify({
+    symbol: ticker,
+    width: '100%',
+    height: '100%',
+    autosize: true,
+    interval: 'D',
+    timezone: 'America/Los_Angeles',
+    theme: 'dark',
+    style: '1',
+    locale: 'en',
+    backgroundColor: '#111827',
+    gridColor: '#1e293b',
+    hide_top_toolbar: false,
+    hide_legend: false,
+    allow_symbol_change: true,
+    save_image: false,
+    calendar: false,
+    hide_volume: false,
+    support_host: 'https://www.tradingview.com',
+  });
+  widgetDiv.appendChild(script);
+}
+
+async function fetchStockQuote(ticker) {
+  const header = document.getElementById('stockChartHeader');
+  const panel = document.getElementById('stockInfoPanel');
+
+  header.innerHTML = `<div style="font-size:20px;font-weight:800;letter-spacing:-0.3px">${ticker}</div>`;
+  panel.style.display = 'none';
+
+  try {
+    const encoded = encodeURIComponent(ticker);
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=5d&includePrePost=false`);
+    const d = await r.json();
+    const meta = d.chart.result[0].meta;
+    const price = meta.regularMarketPrice;
+    const prev = meta.chartPreviousClose || meta.previousClose;
+    const change = prev ? price - prev : null;
+    const changePct = prev ? ((price - prev) / prev) * 100 : null;
+    const dir = (change ?? 0) >= 0 ? 'up' : 'down';
+
+    header.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <span style="font-size:20px;font-weight:800">${ticker}</span>
+        <span style="font-size:11px;color:var(--muted)">${meta.exchangeName || ''} · ${meta.currency || 'USD'}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">
+        <span style="font-size:28px;font-weight:800">$${price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        <span class="${dir}" style="font-size:16px;font-weight:700">${change!=null?(change>=0?'+':'')+change.toFixed(2):''} (${changePct!=null?fP(changePct):''})</span>
+      </div>
+    `;
+
+    // Extended quote via v10 summary
+    try {
+      const r2 = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encoded}?modules=price,summaryDetail,defaultKeyStatistics`);
+      const s = await r2.json();
+      const p = s.quoteSummary?.result?.[0]?.price || {};
+      const sd = s.quoteSummary?.result?.[0]?.summaryDetail || {};
+      const ks = s.quoteSummary?.result?.[0]?.defaultKeyStatistics || {};
+
+      const v = x => x?.raw != null ? x.raw : x?.fmt || null;
+      const stats = [
+        { label: 'Market Cap', val: fN(v(p.marketCap)) },
+        { label: 'P/E (TTM)', val: v(sd.trailingPE)?.toFixed(1) ?? '—' },
+        { label: 'EPS (TTM)', val: v(ks.trailingEps) != null ? `$${v(ks.trailingEps).toFixed(2)}` : '—' },
+        { label: 'Volume', val: v(sd.volume)?.toLocaleString() ?? '—' },
+        { label: 'Avg Volume', val: v(sd.averageVolume)?.toLocaleString() ?? '—' },
+        { label: '52W High', val: v(sd.fiftyTwoWeekHigh) != null ? `$${v(sd.fiftyTwoWeekHigh).toFixed(2)}` : '—' },
+        { label: '52W Low', val: v(sd.fiftyTwoWeekLow) != null ? `$${v(sd.fiftyTwoWeekLow).toFixed(2)}` : '—' },
+        { label: 'Div Yield', val: v(sd.dividendYield) != null ? (v(sd.dividendYield)*100).toFixed(2)+'%' : '—' },
+        { label: 'Beta', val: v(sd.beta)?.toFixed(2) ?? '—' },
+        { label: 'Sector', val: p.shortName || '—' },
+      ];
+      panel.style.display = 'block';
+      panel.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:16px 24px">${stats.map(s => `<div class="stock-stat"><span class="stat-label">${s.label}</span><span class="stat-val">${s.val}</span></div>`).join('')}</div>`;
+    } catch { panel.style.display = 'none'; }
+
+  } catch (e) {
+    header.innerHTML = `<div style="font-size:20px;font-weight:800">${ticker}</div><div style="color:var(--muted);font-size:12px;margin-top:4px">Quote unavailable (${e.message})</div>`;
+  }
 }
 
 // -- CRYPTO --
@@ -393,20 +565,28 @@ async function loadReport() {
   } catch(e) { document.getElementById('reportContent').innerHTML = `<p style="color:var(--muted)">Report not available (${e.message})</p>`; }
 }
 
-// NAV — hash-based routing so each tab has a unique URL
+// NAV — hash-based routing: #stocks/NVDA loads the chart for NVDA
 const VALID_PAGES = ['markets','stocks','crypto','sentiment','report'];
 
-function navigateTo(page) {
+function parseHash() {
+  const h = location.hash.replace('#','');
+  const [page, ...rest] = h.split('/');
+  return { page: VALID_PAGES.includes(page) ? page : 'markets', param: rest.join('/') };
+}
+
+function navigateTo(page, param) {
   if (!VALID_PAGES.includes(page)) page = 'markets';
   document.querySelectorAll('.nlink').forEach(n => n.classList.toggle('active', n.dataset.page === page));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === page));
-  if (location.hash !== '#' + page) history.pushState(null, '', '#' + page);
-  document.title = 'findata — ' + page.charAt(0).toUpperCase() + page.slice(1);
+  const hash = param ? `#${page}/${param}` : `#${page}`;
+  if (location.hash !== hash) history.pushState(null, '', hash);
+  document.title = 'findata — ' + page.charAt(0).toUpperCase() + page.slice(1) + (param ? ` · ${param}` : '');
+  if (page === 'stocks' && param) loadStockChart(param);
 }
 
 document.querySelectorAll('.nlink').forEach(l => l.addEventListener('click', () => navigateTo(l.dataset.page)));
-window.addEventListener('hashchange', () => navigateTo(location.hash.replace('#','') || 'markets'));
-window.addEventListener('popstate', () => navigateTo(location.hash.replace('#','') || 'markets'));
+window.addEventListener('hashchange', () => { const h = parseHash(); navigateTo(h.page, h.param); });
+window.addEventListener('popstate', () => { const h = parseHash(); navigateTo(h.page, h.param); });
 
 document.querySelectorAll('.lang-btn').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.lang-btn').forEach(x=>x.classList.remove('active'));
@@ -426,7 +606,8 @@ fetch('data.json', { cache: 'no-store' }).then(r => {
   try { renderCrypto(); } catch (e) { console.error(e); }
   try { renderSentiment(); } catch (e) { console.error(e); }
   try { renderReport(); } catch (e) { console.error(e); }
-  navigateTo(location.hash.replace('#','') || 'markets');
+  const initHash = parseHash();
+  navigateTo(initHash.page, initHash.param);
 }).catch(e => {
   document.getElementById('snapTime').textContent = `Could not load data.json (${e.message})`;
 });
