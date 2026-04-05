@@ -208,6 +208,10 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="spacer"></div>
   <div class="live-ind"><span class="live-dot"></span>LIVE</div>
   <div class="snap-time" id="snapTime"></div>
+  <div class="lang-toggle" style="margin-left:12px">
+    <div class="lang-btn active" data-gl="en">EN</div>
+    <div class="lang-btn" data-gl="cn">中文</div>
+  </div>
 </div>
 
 <div class="main">
@@ -217,15 +221,15 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="idx-banner" id="idxRow"></div>
   <div class="layout">
     <div class="left-col">
-      <div class="card"><div class="card-title">S&P 500 — 30 Day</div><div class="chart-box" id="spxChartContainer"></div></div>
-      <div class="card"><div class="card-title">Mega-Cap Stocks</div><table id="megaTable"><thead><tr><th>Ticker</th><th>Price</th><th>Chg%</th><th>MktCap</th><th>P/E</th><th>30d</th></tr></thead><tbody></tbody></table></div>
-      <div class="card"><div class="card-title">Commodities & Safe Havens</div><table id="cmdtyTable"><thead><tr><th>Asset</th><th>Price</th><th>Chg</th><th>1d%</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><div class="card-title" id="spxTitle">S&P 500 — 30 Day</div><div class="chart-box" id="spxChartContainer"></div></div>
+      <div class="card"><div class="card-title" id="megaTitle">Mega-Cap Stocks</div><table id="megaTable"><thead id="megaThead"><tr><th>Ticker</th><th>Price</th><th>Chg%</th><th>MktCap</th><th>P/E</th><th>30d</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><div class="card-title" id="cmdtyTitle">Commodities & Safe Havens</div><table id="cmdtyTable"><thead id="cmdtyThead"><tr><th>Asset</th><th>Price</th><th>Chg</th><th>1d%</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="right-col">
-      <div class="card" id="mktSentimentCard"><div class="card-title">Market Sentiment</div><div id="mktSentiment"></div></div>
-      <div class="card"><div class="card-title">Sector Heatmap <span style="font-size:10px;color:var(--muted);text-transform:none;font-weight:400">(5-day)</span></div><div id="sectorBars"></div></div>
-      <div class="card"><div class="card-title"><span class="badge">LIVE</span> Reddit Buzz</div><div id="sideNews"></div></div>
-      <div class="card"><div class="card-title">Trending Tickers</div><div class="trend-row" id="trendTickers"></div></div>
+      <div class="card" id="mktSentimentCard"><div class="card-title" id="sentTitle">Market Sentiment</div><div id="mktSentiment"></div></div>
+      <div class="card"><div class="card-title" id="sectorTitle">Sector Heatmap <span style="font-size:10px;color:var(--muted);text-transform:none;font-weight:400">(5-day)</span></div><div id="sectorBars"></div></div>
+      <div class="card"><div class="card-title"><span class="badge">LIVE</span> <span id="redditTitle">Reddit Buzz</span></div><div id="sideNews"></div></div>
+      <div class="card"><div class="card-title" id="trendTitle">Trending Tickers</div><div class="trend-row" id="trendTickers"></div></div>
     </div>
   </div>
 </div>
@@ -262,12 +266,12 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="cryptoCharts"></div>
   <!-- BTC On-Chain Summary & Prediction -->
   <div class="card" style="margin-top:16px" id="cryptoSummaryCard">
-    <div class="card-title">BTC On-Chain Summary & Prediction</div>
+    <div class="card-title" id="cryptoSummaryTitle">BTC On-Chain Summary & Prediction</div>
     <div id="cryptoSummary"><p style="color:var(--muted)">Analyzing indicators...</p></div>
   </div>
   <!-- On-chain indicators from Google Sheet (live fetch, auto-refresh hourly) -->
   <div class="card" style="margin-top:16px" id="cryptoIndicatorsCard">
-    <div class="card-title">BTC On-Chain Indicators
+    <div class="card-title"><span id="cryptoIndTitle">BTC On-Chain Indicators</span>
       <a href="https://docs.google.com/spreadsheets/d/1hLWDubMLBkekQ2jxkx_GV1JpLNivgERHSFBLzRtSkKk/edit" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">Open Sheet</a>
       <span id="ciRefreshTime" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:auto"></span>
     </div>
@@ -296,6 +300,111 @@ tr:hover { background: rgba(59,130,246,0.04); }
 </div>
 
 <script>
+// ---- i18n ----
+let LANG = localStorage.getItem('findata_lang') || 'en';
+const I18N = {
+  // Nav
+  'Markets': {en:'Markets', cn:'市场'},
+  'Stocks': {en:'Stocks', cn:'股票'},
+  'Crypto': {en:'Crypto', cn:'加密货币'},
+  'Sentiment': {en:'Sentiment', cn:'舆情'},
+  'Report': {en:'Report', cn:'报告'},
+  // Markets page
+  'S&P 500 — 30 Day': {en:'S&P 500 — 30 Day', cn:'标普500 — 30天'},
+  'Mega-Cap Stocks': {en:'Mega-Cap Stocks', cn:'超大盘股'},
+  'Commodities & Safe Havens': {en:'Commodities & Safe Havens', cn:'大宗商品与避险资产'},
+  'Market Sentiment': {en:'Market Sentiment', cn:'市场情绪'},
+  'Sector Heatmap': {en:'Sector Heatmap', cn:'板块热力图'},
+  'Reddit Buzz': {en:'Reddit Buzz', cn:'Reddit 热议'},
+  'Trending Tickers': {en:'Trending Tickers', cn:'热门股票'},
+  'LAST': {en:'LAST', cn:'最新'},
+  // Tables
+  'Ticker': {en:'Ticker', cn:'代码'}, 'Price': {en:'Price', cn:'价格'}, 'Chg%': {en:'Chg%', cn:'涨跌%'},
+  'MktCap': {en:'MktCap', cn:'市值'}, 'P/E': {en:'P/E', cn:'市盈率'},
+  'Asset': {en:'Asset', cn:'资产'}, 'Chg': {en:'Chg', cn:'涨跌'}, '1d%': {en:'1d%', cn:'日涨跌'},
+  '5d%': {en:'5d%', cn:'5日%'}, 'Name': {en:'Name', cn:'名称'}, 'Change': {en:'Change', cn:'涨跌'},
+  'Market Cap': {en:'Market Cap', cn:'市值'}, '30d Chart': {en:'30d Chart', cn:'30日走势'},
+  // Stocks page
+  'Search ticker': {en:'Search ticker (AAPL, MSFT, TSLA...)', cn:'搜索股票代码 (AAPL, MSFT, TSLA...)'},
+  'Technical Indicators': {en:'Technical Indicators', cn:'技术指标'},
+  'News & Headlines': {en:'News & Headlines', cn:'新闻头条'},
+  'Overall': {en:'Overall', cn:'综合'},
+  'SELL': {en:'SELL', cn:'卖出'}, 'BUY': {en:'BUY', cn:'买入'},
+  'Bullish': {en:'Bullish', cn:'看涨'}, 'Bearish': {en:'Bearish', cn:'看跌'}, 'Neutral': {en:'Neutral', cn:'中性'},
+  'Overbought': {en:'Overbought', cn:'超买'}, 'Oversold': {en:'Oversold', cn:'超卖'},
+  'Above': {en:'Above', cn:'上方'}, 'Below': {en:'Below', cn:'下方'},
+  'Strong Buy': {en:'Strong Buy', cn:'强力买入'}, 'Strong Sell': {en:'Strong Sell', cn:'强力卖出'},
+  'Buy': {en:'Buy', cn:'买入'}, 'Sell': {en:'Sell', cn:'卖出'},
+  'High': {en:'High', cn:'高'}, 'Low': {en:'Low', cn:'低'}, 'Normal': {en:'Normal', cn:'正常'},
+  'Moderate': {en:'Moderate', cn:'适中'}, 'In Band': {en:'In Band', cn:'带内'},
+  'Near High': {en:'Near High', cn:'接近高点'}, 'Near Low': {en:'Near Low', cn:'接近低点'},
+  // Sentiment
+  'VIX (Volatility Index)': {en:'VIX (Volatility Index)', cn:'VIX (恐慌指数)'},
+  'Crypto Fear & Greed': {en:'Crypto Fear & Greed', cn:'加密货币恐惧与贪婪'},
+  'Market Breadth (S&P 500)': {en:'Market Breadth (S&P 500)', cn:'市场广度 (标普500)'},
+  'Put/Call Ratio (est.)': {en:'Put/Call Ratio (est.)', cn:'看跌/看涨比率 (估)'},
+  'Calm': {en:'Calm', cn:'平静'}, 'Fear': {en:'Fear', cn:'恐惧'}, 'Panic': {en:'Panic', cn:'恐慌'},
+  'Extreme Fear': {en:'Extreme Fear', cn:'极度恐惧'}, 'Extreme Greed': {en:'Extreme Greed', cn:'极度贪婪'},
+  'Weak': {en:'Weak', cn:'弱'}, 'Strong': {en:'Strong', cn:'强'},
+  // Crypto
+  'BTC On-Chain Summary & Prediction': {en:'BTC On-Chain Summary & Prediction', cn:'BTC 链上总结与预测'},
+  'BTC On-Chain Indicators': {en:'BTC On-Chain Indicators', cn:'BTC 链上指标'},
+  'Open Sheet': {en:'Open Sheet', cn:'打开表格'},
+  'Trending Coins': {en:'Trending Coins', cn:'热门币种'},
+  'Indicator': {en:'Indicator', cn:'指标'}, 'Value': {en:'Value', cn:'数值'},
+  'Signal': {en:'Signal', cn:'信号'}, 'Date': {en:'Date', cn:'日期'},
+  'Overall Signal': {en:'Overall Signal', cn:'综合信号'},
+  'Cycle Position': {en:'Cycle Position', cn:'周期位置'},
+  'Valuation & Cycle': {en:'Valuation & Cycle', cn:'估值与周期'},
+  'Sentiment & Flow': {en:'Sentiment & Flow', cn:'情绪与资金流'},
+  'Analysis': {en:'Analysis', cn:'分析'},
+  'Strong Bullish': {en:'Strong Bullish', cn:'强力看涨'}, 'Strong Bearish': {en:'Strong Bearish', cn:'强力看跌'},
+  'Early Cycle (Accumulation)': {en:'Early Cycle (Accumulation)', cn:'早期 (积累阶段)'},
+  'Mid-Cycle (Expansion)': {en:'Mid-Cycle (Expansion)', cn:'中期 (扩张阶段)'},
+  'Late-Cycle (Acceleration)': {en:'Late-Cycle (Acceleration)', cn:'后期 (加速阶段)'},
+  'Peak Zone (Distribution)': {en:'Peak Zone (Distribution)', cn:'顶部区域 (分配阶段)'},
+  // Report
+  'English': {en:'English', cn:'English'}, '中文': {en:'中文', cn:'中文'},
+  'Select a report above.': {en:'Select a report above.', cn:'请在上方选择报告日期。'},
+  'No reports': {en:'No reports', cn:'暂无报告'},
+  // Misc
+  'Snapshot empty or still loading': {en:'Snapshot empty or still loading', cn:'数据为空或仍在加载中'},
+  'Analyzing indicators...': {en:'Analyzing indicators...', cn:'正在分析指标...'},
+  'Loading indicators...': {en:'Loading indicators from APIs...', cn:'正在从API加载指标...'},
+  'No data': {en:'No data available', cn:'暂无数据'},
+  'above': {en:'above', cn:'以上'}, 'off': {en:'off', cn:'偏离'},
+  'bullish': {en:'bullish', cn:'看涨'}, 'bearish': {en:'bearish', cn:'看跌'},
+};
+function t(key) { return (I18N[key] && I18N[key][LANG]) || key; }
+
+function applyLanguage() {
+  document.querySelectorAll('.nlink').forEach(n => {
+    const page = n.dataset.page;
+    const map = {markets:'Markets', stocks:'Stocks', crypto:'Crypto', sentiment:'Sentiment', report:'Report'};
+    if (map[page]) n.textContent = t(map[page]);
+  });
+  document.querySelectorAll('[data-gl]').forEach(b => b.classList.toggle('active', b.dataset.gl === LANG));
+
+  const setText = (id, key) => { const el = document.getElementById(id); if (el) el.textContent = t(key); };
+  setText('spxTitle', 'S&P 500 — 30 Day');
+  setText('megaTitle', 'Mega-Cap Stocks');
+  setText('cmdtyTitle', 'Commodities & Safe Havens');
+  setText('sentTitle', 'Market Sentiment');
+  setText('sectorTitle', 'Sector Heatmap');
+  setText('redditTitle', 'Reddit Buzz');
+  setText('trendTitle', 'Trending Tickers');
+  setText('cryptoSummaryTitle', 'BTC On-Chain Summary & Prediction');
+  setText('cryptoIndTitle', 'BTC On-Chain Indicators');
+
+  const megaTh = document.getElementById('megaThead');
+  if (megaTh) megaTh.innerHTML = `<tr><th>${t('Ticker')}</th><th>${t('Price')}</th><th>${t('Chg%')}</th><th>${t('MktCap')}</th><th>${t('P/E')}</th><th>30d</th></tr>`;
+  const cmdtyTh = document.getElementById('cmdtyThead');
+  if (cmdtyTh) cmdtyTh.innerHTML = `<tr><th>${t('Asset')}</th><th>${t('Price')}</th><th>${t('Chg')}</th><th>${t('1d%')}</th><th>${t('5d%')}</th></tr>`;
+
+  const searchInput = document.getElementById('stockSearchInput');
+  if (searchInput) searchInput.placeholder = t('Search ticker');
+}
+
 let DATA = {};
 const fN = n => { if(n==null) return 'N/A'; if(Math.abs(n)>=1e12) return `$${(n/1e12).toFixed(2)}T`; if(Math.abs(n)>=1e9) return `$${(n/1e9).toFixed(0)}B`; if(Math.abs(n)>=1e6) return `$${(n/1e6).toFixed(1)}M`; return `$${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`; };
 const fIdx = n => { if(n==null) return 'N/A'; return n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };
@@ -1235,9 +1344,23 @@ document.querySelectorAll('.nlink').forEach(l => l.addEventListener('click', () 
 window.addEventListener('hashchange', () => { const h = parseHash(); navigateTo(h.page, h.param); });
 window.addEventListener('popstate', () => { const h = parseHash(); navigateTo(h.page, h.param); });
 
-document.querySelectorAll('.lang-btn').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('.lang-btn').forEach(x=>x.classList.remove('active'));
+// Report language toggle (EN/CN in report section)
+document.querySelectorAll('.lang-btn[data-lang]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.lang-btn[data-lang]').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); currentLang=b.dataset.lang; loadReport();
+}));
+
+// Global language toggle (EN/中文 in nav bar)
+document.querySelectorAll('.lang-btn[data-gl]').forEach(b => b.addEventListener('click', () => {
+  LANG = b.dataset.gl;
+  localStorage.setItem('findata_lang', LANG);
+  applyLanguage();
+  // Re-render everything with new language
+  try { renderMarkets(); } catch(e) {}
+  try { renderStocks(); } catch(e) {}
+  try { renderCrypto(); } catch(e) {}
+  try { renderSentiment(); } catch(e) {}
+  try { renderReport(); } catch(e) {}
 }));
 
 // LOAD DATA (no-store avoids stale empty snapshots from browser disk cache)
@@ -1253,6 +1376,7 @@ fetch('data.json', { cache: 'no-store' }).then(r => {
   try { renderCrypto(); } catch (e) { console.error(e); }
   try { renderSentiment(); } catch (e) { console.error(e); }
   try { renderReport(); } catch (e) { console.error(e); }
+  applyLanguage();
   const initHash = parseHash();
   navigateTo(initHash.page, initHash.param);
 }).catch(e => {
