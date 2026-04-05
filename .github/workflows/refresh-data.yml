@@ -19,7 +19,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install yfinance requests pandas ccxt pycoingecko
+        run: pip install --upgrade yfinance requests pandas ccxt pycoingecko
 
       - name: Update dashboard data
         run: python examples/update_dashboard.py

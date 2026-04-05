@@ -18,6 +18,8 @@ PRED_DIR = os.path.join(REPO_DIR, "predictions")
 
 from findata import us_stocks, crypto, reddit_sentiment as reddit
 
+DATA_JSON_PATH = os.path.join(DOCS_DIR, "data.json")
+
 
 def generate_data_json():
     data = {
@@ -155,9 +157,21 @@ def main():
 
     print("Generating data.json...")
     data = generate_data_json()
-    with open(os.path.join(DOCS_DIR, "data.json"), "w") as f:
-        json.dump(data, f)
-    print(f"  data.json: {len(json.dumps(data))} bytes")
+
+    # Avoid replacing a good snapshot with an empty one when Yahoo blocks CI (rate limit / datacenter).
+    if len(data.get("indices") or []) == 0 and len(data.get("megacaps") or []) == 0:
+        if os.path.isfile(DATA_JSON_PATH):
+            print(
+                "WARNING: No US equity data from Yahoo; leaving existing docs/data.json unchanged.",
+                file=sys.stderr,
+            )
+        else:
+            print("ERROR: No equity data and no existing data.json to fall back on.", file=sys.stderr)
+            sys.exit(1)
+    else:
+        with open(DATA_JSON_PATH, "w") as f:
+            json.dump(data, f)
+        print(f"  data.json: {len(json.dumps(data))} bytes")
 
     print("Syncing predictions to docs/...")
     sync_predictions_to_docs()

@@ -187,22 +187,49 @@ const fN = n => { if(n==null) return 'N/A'; if(Math.abs(n)>=1e12) return `$${(n/
 const fP = n => n==null?'N/A':`${n>=0?'+':''}${n.toFixed(2)}%`;
 const cls = n => n>=0?'up':'down';
 
+/** Normalize snapshot so one missing field cannot break the whole dashboard. */
+function normalizeSnapshot(raw) {
+  const o = raw && typeof raw === 'object' ? raw : {};
+  return {
+    generated: o.generated ?? '—',
+    date: o.date ?? '',
+    indices: Array.isArray(o.indices) ? o.indices : [],
+    megacaps: Array.isArray(o.megacaps) ? o.megacaps : [],
+    sectors: Array.isArray(o.sectors) ? o.sectors : [],
+    commodities: Array.isArray(o.commodities) ? o.commodities : [],
+    crypto: Array.isArray(o.crypto) ? o.crypto : [],
+    reddit: Array.isArray(o.reddit) ? o.reddit : [],
+    reports: Array.isArray(o.reports) ? o.reports : [],
+    crypto_trending: Array.isArray(o.crypto_trending) ? o.crypto_trending : [],
+  };
+}
+
 function mkChart(el, labels, data, color) {
-  new Chart(el, { type:'line', data:{ labels, datasets:[{ data, borderColor:color, backgroundColor:color+'15', borderWidth:2, pointRadius:0, fill:true, tension:0.3 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#475569',maxTicksLimit:6,font:{size:10}},grid:{color:'#1e293b'}}, y:{ticks:{color:'#475569',font:{size:10}},grid:{color:'#1e293b'}} } } });
+  try {
+    if (typeof Chart === 'undefined' || !el || !labels || !data || !data.length) return;
+    new Chart(el, { type:'line', data:{ labels, datasets:[{ data, borderColor:color, backgroundColor:color+'15', borderWidth:2, pointRadius:0, fill:true, tension:0.3 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ x:{ticks:{color:'#475569',maxTicksLimit:6,font:{size:10}},grid:{color:'#1e293b'}}, y:{ticks:{color:'#475569',font:{size:10}},grid:{color:'#1e293b'}} } } });
+  } catch (e) { console.warn('mkChart', e); }
 }
 function spark(el, data, color) {
-  new Chart(el, { type:'line', data:{ labels:data.map((_,i)=>i), datasets:[{ data, borderColor:color, borderWidth:1.5, pointRadius:0, fill:false, tension:0.3 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{display:false},y:{display:false}} } });
+  try {
+    if (typeof Chart === 'undefined' || !el || !data || !data.length) return;
+    new Chart(el, { type:'line', data:{ labels:data.map((_,i)=>i), datasets:[{ data, borderColor:color, borderWidth:1.5, pointRadius:0, fill:false, tension:0.3 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{display:false},y:{display:false}} } });
+  } catch (e) { console.warn('spark', e); }
 }
 
 // -- MARKETS --
 function renderMarkets() {
-  document.getElementById('idxRow').innerHTML = DATA.indices.map(i => `<div class="idx-card"><div class="idx-name">${i.ticker}</div><div class="idx-price">${fN(i.price)}</div><div class="idx-change ${cls(i.change_pct)}">${fP(i.change_pct)}</div></div>`).join('');
+  if (!DATA.indices.length && !DATA.megacaps.length) {
+    document.getElementById('idxRow').innerHTML = '<div class="idx-card" style="flex:1 1 100%;min-width:100%;border-color:var(--orange)"><div class="idx-name">Market data</div><div class="idx-price" style="font-size:14px;font-weight:500">Snapshot empty or still loading</div><div class="idx-change" style="color:var(--muted);font-weight:400">Try a hard refresh. If this persists, the data refresh workflow may be blocked (Yahoo from GitHub Actions).</div></div>';
+  } else {
+    document.getElementById('idxRow').innerHTML = DATA.indices.map(i => `<div class="idx-card"><div class="idx-name">${i.ticker}</div><div class="idx-price">${fN(i.price)}</div><div class="idx-change ${cls(i.change_pct)}">${fP(i.change_pct)}</div></div>`).join('');
+  }
 
   const spy = DATA.indices.find(i=>i.ticker==='SPY');
   if(spy) mkChart(document.getElementById('spyChart'), spy.dates, spy.history, '#3b82f6');
 
   const sb = document.getElementById('sectorBars');
-  const mx = Math.max(...DATA.sectors.map(s=>Math.abs(s.ret_5d||0)),1);
+  const mx = Math.max(...(DATA.sectors.length ? DATA.sectors.map(s=>Math.abs(s.ret_5d||0)) : [1]), 1);
   sb.innerHTML = DATA.sectors.map(s => {
     const w = Math.abs(s.ret_5d||0)/mx*100;
     const c = (s.ret_5d||0)>=0?'var(--green)':'var(--red)';
@@ -215,13 +242,13 @@ function renderMarkets() {
   document.querySelector('#cmdtyTable tbody').innerHTML = DATA.commodities.map(c => `<tr><td>${c.name}</td><td>${fN(c.price)}</td><td class="${cls(c.ret_5d)}">${fP(c.ret_5d)}</td></tr>`).join('');
 
   // Sidebar news
-  const allPosts = DATA.reddit.flatMap(s => s.posts.map(p => ({...p, sub: s.subreddit})));
+  const allPosts = DATA.reddit.flatMap(s => (s.posts || []).map(p => ({...p, sub: s.subreddit})));
   allPosts.sort((a,b) => b.score - a.score);
   document.getElementById('sideNews').innerHTML = allPosts.slice(0,8).map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>200?'up':''}">${p.score}</span>${p.title.slice(0,75)}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">r/${p.sub} · ${p.comments} comments</div></div>`).join('');
 
   // Trending tickers
   const allMentions = {};
-  DATA.reddit.forEach(s => s.ticker_mentions.forEach(t => { allMentions[t.ticker] = (allMentions[t.ticker]||0) + t.count; }));
+  DATA.reddit.forEach(s => (s.ticker_mentions || []).forEach(t => { allMentions[t.ticker] = (allMentions[t.ticker]||0) + t.count; }));
   const sorted = Object.entries(allMentions).sort((a,b)=>b[1]-a[1]).slice(0,12);
   document.getElementById('trendTickers').innerHTML = sorted.map(([t,c]) => `<span class="trend-tag">${t} <span style="color:var(--muted);font-weight:400">${c}</span></span>`).join('');
 }
@@ -248,9 +275,13 @@ function renderCrypto() {
 
 // -- SENTIMENT --
 function renderSentiment() {
+  if (!DATA.reddit.length) {
+    document.getElementById('redditPanels').innerHTML = '<div class="card" style="grid-column:1/-1"><div class="card-title">Reddit</div><p style="color:var(--muted)">No Reddit snapshot in data.json (fetch may have failed in CI, or r/JSON is rate-limited).</p></div>';
+    return;
+  }
   document.getElementById('redditPanels').innerHTML = DATA.reddit.map(sub => {
-    const posts = sub.posts.map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>100?'up':''}">${p.score}</span>${p.title}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">${p.comments} comments</div></div>`).join('');
-    const mentions = sub.ticker_mentions.length ? `<div style="margin-top:8px" class="trend-row">${sub.ticker_mentions.map(t=>`<span class="trend-tag">${t.ticker} <span style="color:var(--muted)">${t.count}</span></span>`).join('')}</div>` : '';
+    const posts = (sub.posts || []).map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>100?'up':''}">${p.score}</span>${p.title}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">${p.comments} comments</div></div>`).join('');
+    const mentions = (sub.ticker_mentions && sub.ticker_mentions.length) ? `<div style="margin-top:8px" class="trend-row">${sub.ticker_mentions.map(t=>`<span class="trend-tag">${t.ticker} <span style="color:var(--muted)">${t.count}</span></span>`).join('')}</div>` : '';
     return `<div class="card"><div class="card-title">r/${sub.subreddit}</div>${posts}${mentions}</div>`;
   }).join('');
 }
@@ -286,12 +317,21 @@ document.querySelectorAll('.lang-btn').forEach(b => b.addEventListener('click', 
   b.classList.add('active'); currentLang=b.dataset.lang; loadReport();
 }));
 
-// LOAD DATA
-fetch('data.json').then(r=>r.json()).then(d => {
-  DATA = d;
-  document.getElementById('snapTime').textContent = d.generated;
-  renderMarkets(); renderStocks(); renderCrypto(); renderSentiment(); renderReport();
-}).catch(e => { document.getElementById('snapTime').textContent = `Error: ${e}`; });
+// LOAD DATA (no-store avoids stale empty snapshots from browser disk cache)
+fetch('data.json', { cache: 'no-store' }).then(r => {
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}).then(d => {
+  DATA = normalizeSnapshot(d);
+  document.getElementById('snapTime').textContent = DATA.generated;
+  try { renderMarkets(); } catch (e) { console.error(e); }
+  try { renderStocks(); } catch (e) { console.error(e); }
+  try { renderCrypto(); } catch (e) { console.error(e); }
+  try { renderSentiment(); } catch (e) { console.error(e); }
+  try { renderReport(); } catch (e) { console.error(e); }
+}).catch(e => {
+  document.getElementById('snapTime').textContent = `Could not load data.json (${e.message})`;
+});
 
 // --- LIVE TICKER STRIP ---
 const LIVE_CRYPTO = 'bitcoin,ethereum,solana';
