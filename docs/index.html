@@ -163,6 +163,23 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .ci-prev { font-size: 11px; color: var(--muted); }
 .ci-spark { display: inline-flex; gap: 3px; align-items: flex-end; height: 20px; }
 .ci-spark .ci-bar { width: 6px; border-radius: 2px; background: var(--accent); opacity: 0.6; }
+
+/* Crypto summary */
+.cs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+@media (max-width: 800px) { .cs-grid { grid-template-columns: 1fr; } }
+.cs-section { background: var(--surface2); border-radius: 8px; padding: 14px; }
+.cs-section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.cs-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+.cs-item .cs-label { color: var(--text); }
+.cs-item .cs-val { font-weight: 700; }
+.cs-verdict { margin-top: 16px; padding: 16px; border-radius: 8px; text-align: center; }
+.cs-verdict.bullish { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); }
+.cs-verdict.bearish { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
+.cs-verdict.neutral { background: rgba(100,116,139,0.1); border: 1px solid rgba(100,116,139,0.3); }
+.cs-verdict .cs-signal { font-size: 22px; font-weight: 800; }
+.cs-verdict .cs-desc { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.cs-meter { height: 10px; border-radius: 5px; background: linear-gradient(to right, var(--red) 0%, var(--yellow) 50%, var(--green) 100%); position: relative; margin: 12px 0 4px; }
+.cs-meter .cs-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--text); background: var(--surface); position: absolute; top: -3px; transform: translateX(-50%); }
 </style>
 </head>
 <body>
@@ -232,6 +249,11 @@ tr:hover { background: rgba(59,130,246,0.04); }
 <div class="page" id="crypto">
   <div class="crypto-row" id="cryptoCards"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="cryptoCharts"></div>
+  <!-- BTC On-Chain Summary & Prediction -->
+  <div class="card" style="margin-top:16px" id="cryptoSummaryCard">
+    <div class="card-title">BTC On-Chain Summary & Prediction</div>
+    <div id="cryptoSummary"><p style="color:var(--muted)">Analyzing indicators...</p></div>
+  </div>
   <!-- On-chain indicators from Google Sheet (live fetch, auto-refresh hourly) -->
   <div class="card" style="margin-top:16px" id="cryptoIndicatorsCard">
     <div class="card-title">BTC On-Chain Indicators
@@ -900,13 +922,14 @@ async function fetchCryptoIndicatorsLive() {
     }
 
     renderCryptoIndicatorsTable(container, card, indicators);
+    renderCryptoSummary(indicators);
     timeEl.textContent = 'Live · ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
   } catch (e) {
     console.warn('fetchCryptoIndicatorsLive', e);
-    // Fallback to data.json cached version
     const cached = DATA.crypto_indicators || [];
     if (cached.length) {
       renderCryptoIndicatorsTable(container, card, cached);
+      renderCryptoSummary(cached);
       timeEl.textContent = 'Cached · ' + (DATA.generated || '');
     } else {
       container.innerHTML = '<p style="color:var(--muted)">Could not load indicators</p>';
@@ -994,6 +1017,138 @@ function renderCryptoIndicatorsTable(container, card, indicators) {
       <thead><tr><th>Indicator</th><th>Current</th><th>Previous</th><th>Trend</th><th>Date</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
+  `;
+}
+
+function renderCryptoSummary(indicators) {
+  const el = document.getElementById('cryptoSummary');
+  if (!indicators || !indicators.length) { el.innerHTML = '<p style="color:var(--muted)">No data</p>'; return; }
+
+  const get = name => {
+    const ind = indicators.find(i => i.name === name || i.name.includes(name));
+    return ind ? ind.value : null;
+  };
+  const num = v => v ? parseFloat(String(v).replace(/[^0-9.\-]/g, '')) : null;
+
+  const ahr999 = num(get('9神指数'));
+  const ahr999x = num(get('ahr999x'));
+  const rsi = num(get('RSI'));
+  const fearGreed = num(get('Fear & Greed'));
+  const mvrv = num(get('MVRV'));
+  const puell = num(get('Puell'));
+  const btcDom = num(get('Bitcoin dominance'));
+  const altSeason = num(get('Alt season'));
+  const exchangeRes = num(get('Exchange reserve'));
+  const holder1y = num(get('1 year holder'));
+  const unrealPL = num(get('Unrealized Profit'));
+  const cbbi = num(get('CBBI'));
+  const cum60d = get('60日累计涨幅');
+  const piCycle = get('Pi Cycle');
+  const maMultiplier = get('2-year MA');
+  const heatmap200w = get('200 week');
+  const costBasis = get('cost basis');
+  const usdIndex = num(get('美元指数'));
+  const etfFlow = get('ETF Net Flow');
+  const mstrPrem = num(get('mstr premium'));
+
+  // Scoring system: +1 bullish, -1 bearish per indicator
+  let score = 0;
+  let total = 0;
+  const signals = [];
+
+  function rate(name, val, bullTest, bearTest, bullLabel, bearLabel) {
+    if (val == null) return;
+    total++;
+    if (bullTest) { score++; signals.push({ name, val: String(val), signal: bullLabel || 'Bullish', cls: 'up' }); }
+    else if (bearTest) { score--; signals.push({ name, val: String(val), signal: bearLabel || 'Bearish', cls: 'down' }); }
+    else { signals.push({ name, val: String(val), signal: 'Neutral', cls: '' }); }
+  }
+
+  rate('ahr999 Index', ahr999, ahr999 < 0.45, ahr999 > 1.2, 'Buy zone (<0.45)', 'Overvalued (>1.2)');
+  rate('RSI (14d)', rsi, rsi < 40, rsi > 70, 'Oversold', 'Overbought');
+  rate('Fear & Greed', fearGreed, fearGreed < 25, fearGreed > 75, 'Extreme Fear (buy)', 'Extreme Greed (sell)');
+  rate('MVRV Z-Score', mvrv, mvrv < 1, mvrv > 3.5, 'Undervalued', 'Overvalued');
+  rate('Puell Multiple', puell, puell < 0.5, puell > 3, 'Miner capitulation', 'Miner profit-taking');
+  rate('BTC Dominance', btcDom, btcDom > 60, btcDom < 40, 'BTC strength (risk-off)', 'Alt season potential');
+  rate('Alt Season Index', altSeason, altSeason < 25, altSeason > 75, 'BTC season', 'Alt season');
+  rate('Exchange Reserve', exchangeRes, exchangeRes < 2.3, exchangeRes > 2.7, 'Supply squeeze', 'Sell pressure');
+  rate('1Y Holder %', holder1y, holder1y > 65, holder1y < 55, 'Strong hands', 'Distribution');
+  rate('Unrealized P/L', unrealPL, unrealPL < 40, unrealPL > 60, 'Low euphoria', 'High euphoria (caution)');
+  rate('CBBI', cbbi, cbbi < 50, cbbi > 90, 'Early/mid cycle', 'Near cycle top');
+  rate('USD Index', usdIndex, usdIndex < 100, usdIndex > 105, 'Weak USD (BTC +)', 'Strong USD (BTC -)');
+  rate('MSTR Premium', mstrPrem, mstrPrem > 2, mstrPrem < 1.5, 'High institutional demand', 'Low premium');
+
+  if (piCycle) rate('Pi Cycle Top', null, /黄线下方|below/i.test(piCycle), /相交|crossed/i.test(piCycle), 'No top signal', 'Top signal!');
+  if (maMultiplier) rate('2Y MA Multiplier', null, /绿线上方|above green/i.test(maMultiplier), /红线|red/i.test(maMultiplier), 'Above 2Y MA', 'Near top band');
+  if (costBasis) rate('Cost Basis', null, /上方|above/i.test(costBasis), /下方|below/i.test(costBasis), 'Above cost basis', 'Below cost basis');
+
+  const pct = total > 0 ? Math.round((score / total + 1) / 2 * 100) : 50;
+  const overallLabel = score >= 5 ? 'Strong Bullish' : (score >= 2 ? 'Bullish' : (score <= -5 ? 'Strong Bearish' : (score <= -2 ? 'Bearish' : 'Neutral')));
+  const overallCls = score >= 2 ? 'bullish' : (score <= -2 ? 'bearish' : 'neutral');
+
+  const bullCount = signals.filter(s => s.cls === 'up').length;
+  const bearCount = signals.filter(s => s.cls === 'down').length;
+  const neutCount = signals.filter(s => !s.cls).length;
+
+  // Cycle position estimate
+  let cyclePhase = 'Mid-Cycle';
+  if (cbbi) {
+    if (cbbi < 30) cyclePhase = 'Early Cycle (Accumulation)';
+    else if (cbbi < 55) cyclePhase = 'Mid-Cycle (Expansion)';
+    else if (cbbi < 80) cyclePhase = 'Late-Cycle (Acceleration)';
+    else cyclePhase = 'Peak Zone (Distribution)';
+  }
+
+  const halvingDate = new Date('2024-04-19');
+  const daysSinceHalving = Math.floor((Date.now() - halvingDate) / 86400000);
+  const nextHalving = new Date('2028-03-15');
+  const daysToHalving = Math.floor((nextHalving - Date.now()) / 86400000);
+
+  // Build description
+  let desc = [];
+  if (ahr999 != null) desc.push(ahr999 < 0.45 ? 'ahr999 is in the buy zone — historically strong accumulation signal.' : (ahr999 > 1.2 ? 'ahr999 above 1.2 suggests overvaluation relative to trend.' : 'ahr999 in neutral range — hold and watch.'));
+  if (fearGreed != null) desc.push(fearGreed < 25 ? 'Extreme Fear — historically the best time to accumulate.' : (fearGreed > 75 ? 'Extreme Greed — caution, market may be overheated.' : `Fear & Greed at ${fearGreed} — moderate sentiment.`));
+  if (mvrv != null) desc.push(mvrv > 3 ? 'MVRV Z-Score elevated — market may be near a local top.' : (mvrv < 1 ? 'MVRV below 1 — deep undervaluation.' : `MVRV at ${mvrv.toFixed(2)} — healthy range.`));
+  if (exchangeRes != null) desc.push(exchangeRes < 2.3 ? 'Exchange reserves declining — supply squeeze building.' : 'Exchange reserves stable.');
+  desc.push(`${daysSinceHalving} days since last halving (Apr 2024). ${daysToHalving} days to next (~Mar 2028).`);
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Overall Signal</div>
+        <div class="cs-verdict ${overallCls}" style="padding:12px 20px;display:inline-block;border-radius:8px">
+          <span class="cs-signal ${overallCls}">${overallLabel}</span>
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)"><span>Bearish</span><span>Neutral</span><span>Bullish</span></div>
+        <div class="cs-meter"><div class="cs-dot" style="left:${pct}%"></div></div>
+        <div style="display:flex;gap:16px;margin-top:8px;font-size:12px">
+          <span class="up" style="font-weight:600">${bullCount} Bullish</span>
+          <span style="color:var(--muted);font-weight:600">${neutCount} Neutral</span>
+          <span class="down" style="font-weight:600">${bearCount} Bearish</span>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;min-width:160px">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Cycle Position</div>
+        <div style="font-size:14px;font-weight:700">${cyclePhase}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Day ${daysSinceHalving} post-halving</div>
+      </div>
+    </div>
+    <div class="cs-grid">
+      <div class="cs-section">
+        <div class="cs-section-title">Valuation & Cycle</div>
+        ${signals.filter(s => ['ahr999 Index','MVRV Z-Score','Puell Multiple','CBBI','Cost Basis','2Y MA Multiplier','Pi Cycle Top'].includes(s.name)).map(s => `<div class="cs-item"><span class="cs-label">${s.name}</span><span class="cs-val ${s.cls}">${s.signal}</span></div>`).join('')}
+      </div>
+      <div class="cs-section">
+        <div class="cs-section-title">Sentiment & Flow</div>
+        ${signals.filter(s => ['RSI (14d)','Fear & Greed','Unrealized P/L','BTC Dominance','Alt Season Index','Exchange Reserve','1Y Holder %','USD Index','MSTR Premium'].includes(s.name)).map(s => `<div class="cs-item"><span class="cs-label">${s.name}</span><span class="cs-val ${s.cls}">${s.signal}</span></div>`).join('')}
+      </div>
+    </div>
+    <div style="margin-top:16px;padding:14px;background:var(--surface2);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text)">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Analysis</div>
+      ${desc.map(d => `<p style="margin:4px 0">• ${d}</p>`).join('')}
+    </div>
   `;
 }
 
