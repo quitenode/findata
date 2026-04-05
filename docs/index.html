@@ -130,6 +130,27 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .stock-stat { display: inline-flex; flex-direction: column; gap: 2px; min-width: 100px; }
 .stock-stat .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .stock-stat .stat-val { font-size: 14px; font-weight: 600; }
+
+/* Tech indicators */
+.tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.tech-item { background: var(--surface2); border-radius: 6px; padding: 10px 14px; }
+.tech-item .tech-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.tech-item .tech-row { display: flex; justify-content: space-between; align-items: baseline; }
+.tech-item .tech-val { font-size: 16px; font-weight: 700; }
+.tech-item .tech-signal { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+.tech-item .tech-signal.bullish { background: rgba(34,197,94,0.15); color: var(--green); }
+.tech-item .tech-signal.bearish { background: rgba(239,68,68,0.15); color: var(--red); }
+.tech-item .tech-signal.neutral { background: rgba(100,116,139,0.15); color: var(--muted); }
+.tech-gauge { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.tech-gauge .gauge-bar { flex: 1; height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--red), var(--yellow), var(--green)); position: relative; }
+.tech-gauge .gauge-marker { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--text); background: var(--surface); position: absolute; top: -3px; transform: translateX(-50%); }
+
+/* News items in stock page */
+.stock-news-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.stock-news-item:last-child { border-bottom: none; }
+.stock-news-item a { color: var(--text); font-size: 13px; font-weight: 500; line-height: 1.4; }
+.stock-news-item a:hover { color: var(--accent); }
+.stock-news-item .sn-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -187,6 +208,10 @@ tr:hover { background: rgba(59,130,246,0.04); }
   </div>
   <!-- Quote info -->
   <div id="stockInfoPanel" class="card" style="display:none;margin-top:16px"></div>
+  <!-- Technical indicators -->
+  <div id="stockTechPanel" class="card" style="display:none;margin-top:16px"></div>
+  <!-- News -->
+  <div id="stockNewsPanel" class="card" style="display:none;margin-top:16px"></div>
   <!-- Mega-cap table -->
   <div class="card" style="margin-top:16px"><div class="card-title">Mega-Cap Stocks</div><table id="stocksDetailTable"><thead><tr><th>Ticker</th><th>Name</th><th>Price</th><th>Change</th><th>Market Cap</th><th>P/E</th><th>30d Chart</th></tr></thead><tbody></tbody></table></div>
 </div>
@@ -427,8 +452,10 @@ function loadStockChart(ticker) {
   // Load TradingView widget
   renderTVChart(ticker);
 
-  // Fetch quote data from Yahoo
+  // Fetch quote data, technicals, and news in parallel
   fetchStockQuote(ticker);
+  fetchStockTechnicals(ticker);
+  fetchStockNews(ticker);
 }
 
 function renderTVChart(ticker) {
@@ -523,6 +550,167 @@ async function fetchStockQuote(ticker) {
 
   } catch (e) {
     header.innerHTML = `<div style="font-size:20px;font-weight:800">${ticker}</div><div style="color:var(--muted);font-size:12px;margin-top:4px">Quote unavailable (${e.message})</div>`;
+  }
+}
+
+// -- STOCK TECHNICALS (computed client-side from Yahoo OHLCV) --
+async function fetchStockTechnicals(ticker) {
+  const panel = document.getElementById('stockTechPanel');
+  panel.style.display = 'none';
+
+  try {
+    const encoded = encodeURIComponent(ticker);
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=3mo`);
+    const d = await r.json();
+    const result = d.chart.result[0];
+    const closes = result.indicators.quote[0].close.filter(v => v != null);
+    const highs = result.indicators.quote[0].high.filter(v => v != null);
+    const lows = result.indicators.quote[0].low.filter(v => v != null);
+    const volumes = result.indicators.quote[0].volume.filter(v => v != null);
+
+    if (closes.length < 14) { panel.style.display = 'none'; return; }
+
+    const last = closes[closes.length - 1];
+
+    const sma = (arr, n) => arr.length >= n ? arr.slice(-n).reduce((a,b) => a + b, 0) / n : null;
+    const sma5 = sma(closes, 5);
+    const sma10 = sma(closes, 10);
+    const sma20 = sma(closes, 20);
+    const sma50 = sma(closes, 50);
+    const sma200 = closes.length >= 200 ? sma(closes, 200) : null;
+
+    const ema = (arr, n) => {
+      if (arr.length < n) return null;
+      const k = 2 / (n + 1);
+      let e = arr.slice(0, n).reduce((a,b) => a+b, 0) / n;
+      for (let i = n; i < arr.length; i++) e = arr[i] * k + e * (1 - k);
+      return e;
+    };
+    const ema12 = ema(closes, 12);
+    const ema26 = ema(closes, 26);
+    const macd = (ema12 != null && ema26 != null) ? ema12 - ema26 : null;
+
+    // RSI 14
+    let rsi = null;
+    if (closes.length >= 15) {
+      const changes = closes.slice(1).map((c, i) => c - closes[i]);
+      const recent = changes.slice(-14);
+      const gains = recent.filter(c => c > 0).reduce((a,b) => a + b, 0) / 14;
+      const losses = recent.filter(c => c < 0).reduce((a,b) => a + Math.abs(b), 0) / 14;
+      rsi = losses > 0 ? 100 - (100 / (1 + gains / losses)) : 100;
+    }
+
+    // Average volume
+    const avgVol20 = volumes.length >= 20 ? sma(volumes, 20) : null;
+    const latestVol = volumes[volumes.length - 1];
+    const volRatio = (avgVol20 && latestVol) ? latestVol / avgVol20 : null;
+
+    // Daily returns for volatility
+    const returns = closes.slice(1).map((c, i) => (c - closes[i]) / closes[i]);
+    const vol20 = returns.length >= 20
+      ? Math.sqrt(returns.slice(-20).reduce((s, r) => s + r * r, 0) / 20) * Math.sqrt(252) * 100
+      : null;
+
+    // Bollinger Bands
+    let bbUpper = null, bbLower = null;
+    if (closes.length >= 20) {
+      const slice20 = closes.slice(-20);
+      const mean = slice20.reduce((a,b)=>a+b,0)/20;
+      const std = Math.sqrt(slice20.reduce((s,v)=>s+(v-mean)**2,0)/20);
+      bbUpper = mean + 2 * std;
+      bbLower = mean - 2 * std;
+    }
+
+    // 52-week high/low from 3mo data (best we have)
+    const high3m = Math.max(...highs);
+    const low3m = Math.min(...lows);
+
+    // Signals
+    const sigRSI = rsi > 70 ? 'Overbought' : (rsi < 30 ? 'Oversold' : 'Neutral');
+    const sigRSICls = rsi > 70 ? 'bearish' : (rsi < 30 ? 'bullish' : 'neutral');
+    const sigMACD = macd > 0 ? 'Bullish' : (macd < 0 ? 'Bearish' : 'Neutral');
+    const sigMACDCls = macd > 0 ? 'bullish' : (macd < 0 ? 'bearish' : 'neutral');
+    const sigSMA50 = sma50 ? (last > sma50 ? 'Above' : 'Below') : '—';
+    const sigSMA50Cls = sma50 ? (last > sma50 ? 'bullish' : 'bearish') : 'neutral';
+    const sigSMA200 = sma200 ? (last > sma200 ? 'Above' : 'Below') : '—';
+    const sigSMA200Cls = sma200 ? (last > sma200 ? 'bullish' : 'bearish') : 'neutral';
+    const sigBB = (bbUpper && bbLower) ? (last > bbUpper ? 'Above Upper' : (last < bbLower ? 'Below Lower' : 'In Band')) : '—';
+    const sigBBCls = (bbUpper && bbLower) ? (last > bbUpper ? 'bearish' : (last < bbLower ? 'bullish' : 'neutral')) : 'neutral';
+    const sigVol = volRatio ? (volRatio > 1.5 ? 'High' : (volRatio < 0.5 ? 'Low' : 'Normal')) : '—';
+    const sigVolCls = volRatio ? (volRatio > 1.5 ? 'bullish' : (volRatio < 0.5 ? 'bearish' : 'neutral')) : 'neutral';
+
+    // Overall score (simple heuristic)
+    let score = 0;
+    if (rsi < 30) score += 2; else if (rsi < 45) score += 1; else if (rsi > 70) score -= 2; else if (rsi > 55) score -= 1;
+    if (macd > 0) score += 1; else score -= 1;
+    if (sma50 && last > sma50) score += 1; else if (sma50) score -= 1;
+    if (sma200 && last > sma200) score += 1; else if (sma200) score -= 1;
+    const overallLabel = score >= 3 ? 'Strong Buy' : (score >= 1 ? 'Buy' : (score <= -3 ? 'Strong Sell' : (score <= -1 ? 'Sell' : 'Neutral')));
+    const overallCls = score >= 1 ? 'bullish' : (score <= -1 ? 'bearish' : 'neutral');
+    const gaugePos = Math.max(0, Math.min(100, (score + 5) / 10 * 100));
+
+    const f2 = v => v != null ? v.toFixed(2) : '—';
+
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <div class="card-title">Technical Indicators</div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+        <span style="font-size:18px;font-weight:800">Overall: <span class="${overallCls}" style="font-size:18px">${overallLabel}</span></span>
+        <div class="tech-gauge" style="flex:1;min-width:200px">
+          <span style="font-size:10px;color:var(--red);font-weight:600">SELL</span>
+          <div class="gauge-bar"><div class="gauge-marker" style="left:${gaugePos}%"></div></div>
+          <span style="font-size:10px;color:var(--green);font-weight:600">BUY</span>
+        </div>
+      </div>
+      <div class="tech-grid">
+        <div class="tech-item"><div class="tech-label">RSI (14)</div><div class="tech-row"><span class="tech-val">${rsi?rsi.toFixed(1):'—'}</span><span class="tech-signal ${sigRSICls}">${sigRSI}</span></div></div>
+        <div class="tech-item"><div class="tech-label">MACD (12,26)</div><div class="tech-row"><span class="tech-val">${f2(macd)}</span><span class="tech-signal ${sigMACDCls}">${sigMACD}</span></div></div>
+        <div class="tech-item"><div class="tech-label">SMA 50</div><div class="tech-row"><span class="tech-val">${f2(sma50)}</span><span class="tech-signal ${sigSMA50Cls}">${sigSMA50}</span></div></div>
+        <div class="tech-item"><div class="tech-label">SMA 200</div><div class="tech-row"><span class="tech-val">${f2(sma200)}</span><span class="tech-signal ${sigSMA200Cls}">${sigSMA200}</span></div></div>
+        <div class="tech-item"><div class="tech-label">SMA 20</div><div class="tech-row"><span class="tech-val">${f2(sma20)}</span><span class="tech-signal ${last>sma20?'bullish':'bearish'}">${last>sma20?'Above':'Below'}</span></div></div>
+        <div class="tech-item"><div class="tech-label">Bollinger Bands</div><div class="tech-row"><span class="tech-val" style="font-size:12px">${f2(bbLower)} — ${f2(bbUpper)}</span><span class="tech-signal ${sigBBCls}">${sigBB}</span></div></div>
+        <div class="tech-item"><div class="tech-label">Volatility (20d ann.)</div><div class="tech-row"><span class="tech-val">${vol20?vol20.toFixed(1)+'%':'—'}</span><span class="tech-signal neutral">${vol20?(vol20>40?'High':(vol20<15?'Low':'Moderate')):'—'}</span></div></div>
+        <div class="tech-item"><div class="tech-label">Volume vs Avg</div><div class="tech-row"><span class="tech-val">${volRatio?volRatio.toFixed(2)+'x':'—'}</span><span class="tech-signal ${sigVolCls}">${sigVol}</span></div></div>
+        <div class="tech-item"><div class="tech-label">3-Month High</div><div class="tech-row"><span class="tech-val">$${f2(high3m)}</span><span class="tech-signal ${last>=high3m*0.98?'bullish':'neutral'}">${last>=high3m*0.98?'Near High':((1-last/high3m)*100).toFixed(1)+'% off'}</span></div></div>
+        <div class="tech-item"><div class="tech-label">3-Month Low</div><div class="tech-row"><span class="tech-val">$${f2(low3m)}</span><span class="tech-signal ${last<=low3m*1.02?'bearish':'neutral'}">${last<=low3m*1.02?'Near Low':((last/low3m-1)*100).toFixed(1)+'% above'}</span></div></div>
+      </div>
+    `;
+  } catch (e) {
+    console.warn('fetchStockTechnicals', e);
+    panel.style.display = 'none';
+  }
+}
+
+// -- STOCK NEWS (Yahoo Finance) --
+async function fetchStockNews(ticker) {
+  const panel = document.getElementById('stockNewsPanel');
+  panel.style.display = 'none';
+
+  try {
+    const encoded = encodeURIComponent(ticker);
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`);
+    const d = await r.json();
+    const meta = d.chart?.result?.[0]?.meta;
+
+    // Try Yahoo news search
+    const r2 = await fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encoded}&quotesCount=0&newsCount=8&enableFuzzyQuery=false`);
+    const news = await r2.json();
+    const articles = news.news || [];
+
+    if (!articles.length) { panel.style.display = 'none'; return; }
+
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <div class="card-title">News & Headlines — ${ticker}</div>
+      ${articles.map(a => {
+        const date = a.providerPublishTime ? new Date(a.providerPublishTime * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const pub = a.publisher || '';
+        return `<div class="stock-news-item"><a href="${a.link||'#'}" target="_blank" rel="noopener">${a.title||'Untitled'}</a><div class="sn-meta">${pub}${date?' · '+date:''}</div></div>`;
+      }).join('')}
+    `;
+  } catch (e) {
+    console.warn('fetchStockNews', e);
+    panel.style.display = 'none';
   }
 }
 
