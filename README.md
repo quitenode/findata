@@ -208,7 +208,7 @@ Add to `~/.bashrc` to persist across sessions.
 
 ## Dashboard
 
-Live dashboard: **https://michaelzhang-ai.github.io/findata/**
+Live dashboard: **https://quitenode.github.io/findata/**
 
 - Live price ticker (BTC, ETH, SOL, SPY, QQQ, NVDA) -- updates every 30 seconds
 - Charts, sector heatmap, Reddit sentiment
