@@ -19,13 +19,13 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install yfinance edgartools requests pandas ccxt pycoingecko markdown weasyprint
+        run: pip install --upgrade yfinance edgartools requests pandas ccxt pycoingecko markdown weasyprint
+
+      - name: Update dashboard data (runs first so data.json has fresh reddit for report fallback)
+        run: python examples/update_dashboard.py
 
       - name: Generate prediction reports
         run: python examples/daily_prediction.py predictions/
-
-      - name: Update dashboard data
-        run: python examples/update_dashboard.py
 
       - name: Commit and push
         run: |

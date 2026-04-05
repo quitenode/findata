@@ -17,6 +17,7 @@ Usage:
 
 import sys
 import os
+import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,7 @@ from findata import us_stocks, crypto, reddit_sentiment as reddit
 PT = ZoneInfo("America/Los_Angeles")
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "predictions")
+DOCS_DIR = os.path.join(os.path.dirname(__file__), "..", "docs")
 
 SIGNAL_CN = {
     "Bullish": "看涨", "Bearish": "看跌",
@@ -43,6 +45,55 @@ COMMODITIES_ETFS = ["USO", "GLD", "SLV", "TLT", "UUP"]
 CRYPTO_COINS = ["bitcoin", "ethereum", "solana"]
 CRYPTO_PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 REDDIT_SUBS = ["wallstreetbets", "stocks", "investing"]
+
+
+def _load_cached_reddit():
+    """Load reddit data from docs/data.json as fallback when live fetch fails (CI datacenter IPs)."""
+    try:
+        path = os.path.join(DOCS_DIR, "data.json")
+        with open(path) as f:
+            data = json.load(f)
+        return data.get("reddit") or []
+    except Exception:
+        return []
+
+
+def _reddit_posts_from_cache(subreddit: str) -> pd.DataFrame:
+    """Build a posts DataFrame from cached data.json reddit entry."""
+    cached = _load_cached_reddit()
+    for sub in cached:
+        if sub.get("subreddit") == subreddit:
+            rows = []
+            for p in sub.get("posts") or []:
+                rows.append({
+                    "title": p.get("title", ""),
+                    "score": p.get("score", 0),
+                    "num_comments": p.get("comments", 0),
+                    "flair": p.get("flair", ""),
+                    "url": p.get("url", ""),
+                    "subreddit": subreddit,
+                })
+            return pd.DataFrame(rows) if rows else pd.DataFrame()
+    return pd.DataFrame()
+
+
+def _reddit_mentions_from_cache(subreddit: str) -> pd.DataFrame:
+    cached = _load_cached_reddit()
+    for sub in cached:
+        if sub.get("subreddit") == subreddit:
+            rows = [{"ticker": m["ticker"], "mentions": m["count"]}
+                    for m in (sub.get("ticker_mentions") or [])]
+            return pd.DataFrame(rows) if rows else pd.DataFrame()
+    return pd.DataFrame()
+
+
+def get_reddit_posts(subreddit: str, limit: int = 20):
+    """Fetch Reddit posts live, falling back to cached data.json on failure."""
+    try:
+        return reddit.get_hot_posts(subreddit, limit=limit)
+    except Exception:
+        cached = _reddit_posts_from_cache(subreddit)
+        return cached if not cached.empty else pd.DataFrame()
 
 
 def safe_quote(ticker):
@@ -261,19 +312,22 @@ def generate_report() -> str:
     lines.append("\n## Reddit Sentiment\n")
 
     for sub in REDDIT_SUBS:
-        try:
-            posts = reddit.get_hot_posts(sub, limit=20)
-            lines.append(f"\n### r/{sub} -- Top Posts\n")
-            for _, row in posts.head(5).iterrows():
-                flair = f" `{row['flair']}`" if row.get("flair") else ""
-                lines.append(f"- [{row['score']:>5} pts] {row['title'][:80]}{flair}")
+        posts = get_reddit_posts(sub, limit=20)
+        if posts.empty:
+            lines.append(f"\n### r/{sub}\n\n- (no data available)")
+            continue
+        lines.append(f"\n### r/{sub} -- Top Posts\n")
+        for _, row in posts.head(5).iterrows():
+            flair = f" `{row['flair']}`" if row.get("flair") else ""
+            lines.append(f"- [{row['score']:>5} pts] {row['title'][:80]}{flair}")
 
+        try:
             tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
-            if not tickers.empty:
-                mentions = ", ".join(f"**{r['ticker']}**({r['mentions']})" for _, r in tickers.head(10).iterrows())
-                lines.append(f"\nTicker mentions: {mentions}")
         except Exception:
-            lines.append(f"\n### r/{sub}\n\n- (failed to fetch)")
+            tickers = _reddit_mentions_from_cache(sub)
+        if not tickers.empty:
+            mentions = ", ".join(f"**{r['ticker']}**({r['mentions']})" for _, r in tickers.head(10).iterrows())
+            lines.append(f"\nTicker mentions: {mentions}")
 
     # ---- PREDICTION SUMMARY ----
     lines.append("\n## Prediction Summary\n")
@@ -302,8 +356,14 @@ def generate_report() -> str:
 
     lines.append("\n### Key Factors\n")
 
-    # Auto-detect themes from Reddit
-    all_posts = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=15)
+    # Auto-detect themes from Reddit (with fallback)
+    try:
+        all_posts = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=15)
+    except Exception:
+        all_posts = pd.DataFrame()
+    if all_posts.empty:
+        frames = [get_reddit_posts(s, 15) for s in REDDIT_SUBS]
+        all_posts = pd.concat([f for f in frames if not f.empty], ignore_index=True) if any(not f.empty for f in frames) else pd.DataFrame()
     top_titles = " ".join(all_posts["title"].tolist()) if not all_posts.empty else ""
 
     themes = []
@@ -466,20 +526,23 @@ def generate_report_cn() -> str:
     lines.append("\n## Reddit 舆情\n")
     sub_names_cn = {"wallstreetbets": "华尔街赌场", "stocks": "股票", "investing": "投资"}
     for sub in REDDIT_SUBS:
-        try:
-            posts = reddit.get_hot_posts(sub, limit=20)
-            name_cn = sub_names_cn.get(sub, sub)
-            lines.append(f"\n### r/{sub} ({name_cn}) -- 热门帖子\n")
-            for _, row in posts.head(5).iterrows():
-                flair = f" `{row['flair']}`" if row.get("flair") else ""
-                lines.append(f"- [{row['score']:>5} 分] {row['title'][:80]}{flair}")
+        posts = get_reddit_posts(sub, limit=20)
+        name_cn = sub_names_cn.get(sub, sub)
+        if posts.empty:
+            lines.append(f"\n### r/{sub} ({name_cn})\n\n- (无数据)")
+            continue
+        lines.append(f"\n### r/{sub} ({name_cn}) -- 热门帖子\n")
+        for _, row in posts.head(5).iterrows():
+            flair = f" `{row['flair']}`" if row.get("flair") else ""
+            lines.append(f"- [{row['score']:>5} 分] {row['title'][:80]}{flair}")
 
+        try:
             tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
-            if not tickers.empty:
-                mentions = ", ".join(f"**{r['ticker']}**({r['mentions']})" for _, r in tickers.head(10).iterrows())
-                lines.append(f"\n提及股票: {mentions}")
         except Exception:
-            lines.append(f"\n### r/{sub}\n\n- (获取失败)")
+            tickers = _reddit_mentions_from_cache(sub)
+        if not tickers.empty:
+            mentions = ", ".join(f"**{r['ticker']}**({r['mentions']})" for _, r in tickers.head(10).iterrows())
+            lines.append(f"\n提及股票: {mentions}")
 
     # ---- 预测总结 ----
     lines.append("\n## 预测总结\n")
@@ -508,7 +571,13 @@ def generate_report_cn() -> str:
 
     lines.append("\n### 关键因素\n")
 
-    all_posts = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=15)
+    try:
+        all_posts = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=15)
+    except Exception:
+        all_posts = pd.DataFrame()
+    if all_posts.empty:
+        frames = [get_reddit_posts(s, 15) for s in REDDIT_SUBS]
+        all_posts = pd.concat([f for f in frames if not f.empty], ignore_index=True) if any(not f.empty for f in frames) else pd.DataFrame()
     top_titles = " ".join(all_posts["title"].tolist()) if not all_posts.empty else ""
 
     theme_keywords_cn = {
