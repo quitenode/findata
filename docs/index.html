@@ -151,6 +151,18 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .stock-news-item a { color: var(--text); font-size: 13px; font-weight: 500; line-height: 1.4; }
 .stock-news-item a:hover { color: var(--accent); }
 .stock-news-item .sn-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+/* Crypto indicators table */
+.ci-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ci-table th { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.ci-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.ci-table tr:hover { background: rgba(59,130,246,0.04); }
+.ci-table .ci-name { font-weight: 600; }
+.ci-table .ci-name a { color: var(--text); } .ci-table .ci-name a:hover { color: var(--accent); }
+.ci-val { font-weight: 700; font-size: 14px; }
+.ci-prev { font-size: 11px; color: var(--muted); }
+.ci-spark { display: inline-flex; gap: 3px; align-items: flex-end; height: 20px; }
+.ci-spark .ci-bar { width: 6px; border-radius: 2px; background: var(--accent); opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -220,6 +232,11 @@ tr:hover { background: rgba(59,130,246,0.04); }
 <div class="page" id="crypto">
   <div class="crypto-row" id="cryptoCards"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="cryptoCharts"></div>
+  <!-- On-chain indicators from Google Sheet -->
+  <div class="card" style="margin-top:16px" id="cryptoIndicatorsCard">
+    <div class="card-title">BTC On-Chain Indicators <a href="https://docs.google.com/spreadsheets/d/1hLWDubMLBkekQ2jxkx_GV1JpLNivgERHSFBLzRtSkKk/edit" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">Open Sheet</a></div>
+    <div id="cryptoIndicators"></div>
+  </div>
   <div class="card" style="margin-top:16px"><div class="card-title">Trending Coins</div><div id="trendCoins"></div></div>
 </div>
 
@@ -263,6 +280,7 @@ function normalizeSnapshot(raw) {
     reddit: Array.isArray(o.reddit) ? o.reddit : [],
     reports: Array.isArray(o.reports) ? o.reports : [],
     crypto_trending: Array.isArray(o.crypto_trending) ? o.crypto_trending : [],
+    crypto_indicators: Array.isArray(o.crypto_indicators) ? o.crypto_indicators : [],
   };
 }
 
@@ -726,6 +744,72 @@ function renderCrypto() {
     const trending = DATA.crypto_trending || [];
     document.getElementById('trendCoins').innerHTML = trending.length ? trending.map(t => `<div style="padding:4px 0;font-size:13px">#${t.rank} <strong>${t.name}</strong> (${t.symbol}) — Rank ${t.market_cap_rank||'N/A'}</div>`).join('') : '<div style="color:var(--muted)">No trending data</div>';
   } catch(e) {}
+
+  // On-chain indicators from Google Sheet
+  renderCryptoIndicators();
+}
+
+function renderCryptoIndicators() {
+  const container = document.getElementById('cryptoIndicators');
+  const card = document.getElementById('cryptoIndicatorsCard');
+  const indicators = DATA.crypto_indicators || [];
+
+  if (!indicators.length) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+
+  const SKIP = ['减半后500天', '下次减半前500天'];
+  const filtered = indicators.filter(i => !SKIP.includes(i.name) && i.value);
+
+  const signalColor = v => {
+    const vl = (v||'').toLowerCase();
+    if (/greed|overbought|红线上方|贪婪/i.test(vl)) return 'var(--red)';
+    if (/fear|oversold|绿线下方|恐慌/i.test(vl)) return 'var(--green)';
+    if (/上方|bullish|above/i.test(vl)) return 'var(--green)';
+    if (/下方|bearish|below/i.test(vl)) return 'var(--red)';
+    return '';
+  };
+
+  const rows = filtered.map(ind => {
+    const nameHtml = ind.link
+      ? `<a href="${ind.link}" target="_blank" rel="noopener">${ind.name}</a>`
+      : ind.name;
+    const sc = signalColor(ind.value);
+    const valStyle = sc ? ` style="color:${sc}"` : '';
+    const prevHtml = ind.prev_value
+      ? `<span class="ci-prev">${ind.prev_date}: ${ind.prev_value}</span>`
+      : '';
+
+    // Mini sparkline from history (numeric values only)
+    let sparkHtml = '';
+    const nums = (ind.history || []).map(h => parseFloat(h.value.replace(/[^0-9.\-]/g,''))).filter(n => !isNaN(n)).reverse();
+    if (nums.length >= 3) {
+      const mx = Math.max(...nums);
+      const mn = Math.min(...nums);
+      const range = mx - mn || 1;
+      sparkHtml = `<div class="ci-spark">${nums.map(n => {
+        const h = Math.max(3, ((n - mn) / range) * 18);
+        return `<div class="ci-bar" style="height:${h}px"></div>`;
+      }).join('')}</div>`;
+    }
+
+    return `<tr>
+      <td class="ci-name">${nameHtml}</td>
+      <td><span class="ci-val"${valStyle}>${ind.value}</span></td>
+      <td>${prevHtml}</td>
+      <td>${sparkHtml}</td>
+      <td style="font-size:10px;color:var(--muted)">${ind.date}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table class="ci-table">
+      <thead><tr><th>Indicator</th><th>Current</th><th>Previous</th><th>Trend</th><th>Date</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 // -- SENTIMENT --

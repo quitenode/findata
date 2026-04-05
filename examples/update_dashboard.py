@@ -180,6 +180,43 @@ def generate_data_json():
             pass
     data["crypto"] = cryptos
 
+    # Crypto on-chain indicators from Google Sheet
+    try:
+        import csv
+        import io
+        from urllib.request import urlopen
+        SHEET_CSV = "https://docs.google.com/spreadsheets/d/1hLWDubMLBkekQ2jxkx_GV1JpLNivgERHSFBLzRtSkKk/export?format=csv&gid=0"
+        resp = urlopen(SHEET_CSV, timeout=15)
+        reader = csv.reader(io.TextIOWrapper(resp, encoding="utf-8"))
+        rows = list(reader)
+        dates_row = rows[0][3:]
+        indicators = []
+        for row in rows[1:]:
+            if not row or not row[0].strip():
+                continue
+            name = row[0].strip()
+            link = row[1].strip() if len(row) > 1 else ""
+            vals = row[3:] if len(row) > 3 else []
+            history = []
+            for i, v in enumerate(vals):
+                v = v.strip()
+                if v and i < len(dates_row):
+                    history.append({"date": dates_row[i].strip(), "value": v})
+            latest = history[0] if history else {}
+            prev = history[1] if len(history) > 1 else {}
+            indicators.append({
+                "name": name,
+                "link": link,
+                "value": latest.get("value", ""),
+                "date": latest.get("date", ""),
+                "prev_value": prev.get("value", ""),
+                "prev_date": prev.get("date", ""),
+                "history": history[:8],
+            })
+        data["crypto_indicators"] = indicators
+    except Exception as e:
+        print(f"  Warning: failed to fetch crypto sheet: {e}")
+
     reddit_data = []
     for sub in ["wallstreetbets", "stocks", "investing"]:
         try:
