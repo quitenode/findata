@@ -44,12 +44,21 @@ a:hover { text-decoration: underline; }
 .main { max-width: 1400px; margin: 0 auto; padding: 16px 20px; }
 .page { display: none; } .page.active { display: block; }
 
-/* Index cards row */
-.idx-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.idx-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 140px; }
-.idx-card .idx-name { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.idx-card .idx-price { font-size: 22px; font-weight: 700; margin: 2px 0; }
-.idx-card .idx-change { font-size: 13px; font-weight: 600; }
+/* Index banner (CNBC-style) */
+.idx-banner { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+.idx-card { background: var(--surface); padding: 10px 16px; flex: 1; min-width: 160px; border-right: 1px solid var(--border); position: relative; }
+.idx-card:last-child { border-right: none; }
+.idx-card.idx-up { border-top: 3px solid var(--green); }
+.idx-card.idx-down { border-top: 3px solid var(--red); }
+.idx-card.idx-flat { border-top: 3px solid var(--muted); }
+.idx-card .idx-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.idx-card .idx-name { font-size: 12px; font-weight: 800; letter-spacing: 0.3px; }
+.idx-card .idx-price { font-size: 16px; font-weight: 700; }
+.idx-card .idx-detail { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.idx-card .idx-arrow { font-size: 10px; }
+.idx-card .idx-pts { font-size: 12px; font-weight: 600; }
+.idx-card .idx-pct { font-size: 12px; font-weight: 600; }
+.idx-card .idx-date { font-size: 9px; color: var(--muted); margin-top: 3px; letter-spacing: 0.3px; }
 
 /* Layout grid */
 .layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
@@ -135,7 +144,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
 
 <!-- MARKETS PAGE -->
 <div class="page active" id="markets">
-  <div class="idx-row" id="idxRow"></div>
+  <div class="idx-banner" id="idxRow"></div>
   <div class="layout">
     <div class="left-col">
       <div class="card"><div class="card-title">S&P 500 — 30 Day</div><div class="chart-box"><canvas id="spyChart"></canvas></div></div>
@@ -238,9 +247,21 @@ function spark(el, data, color) {
 // -- MARKETS --
 function renderMarkets() {
   if (!DATA.indices.length && !DATA.megacaps.length) {
-    document.getElementById('idxRow').innerHTML = '<div class="idx-card" style="flex:1 1 100%;min-width:100%;border-color:var(--orange)"><div class="idx-name">Market data</div><div class="idx-price" style="font-size:14px;font-weight:500">Snapshot empty or still loading</div><div class="idx-change" style="color:var(--muted);font-weight:400">Try a hard refresh. If this persists, the data refresh workflow may be blocked (Yahoo from GitHub Actions).</div></div>';
+    document.getElementById('idxRow').innerHTML = '<div class="idx-card idx-flat" style="flex:1 1 100%;min-width:100%"><div class="idx-name">Market data</div><div class="idx-price" style="font-size:14px;font-weight:400">Snapshot empty or still loading</div></div>';
   } else {
-    document.getElementById('idxRow').innerHTML = DATA.indices.map(i => `<div class="idx-card"><div class="idx-name">${i.name || i.ticker}</div><div class="idx-price">${fIdx(i.price)}</div><div class="idx-change ${cls(i.change_pct)}">${fP(i.change_pct)}</div></div>`).join('');
+    document.getElementById('idxRow').innerHTML = DATA.indices.map(i => {
+      const chg = i.change_pct ?? 0;
+      const pts = i.change_pts ?? 0;
+      const dir = chg > 0 ? 'up' : (chg < 0 ? 'down' : 'flat');
+      const borderCls = chg > 0 ? 'idx-up' : (chg < 0 ? 'idx-down' : 'idx-flat');
+      const arrow = chg > 0 ? '&#9650;' : (chg < 0 ? '&#9660;' : '');
+      const isVix = (i.name||'').includes('VIX');
+      const ptsStr = isVix ? '' : `<span class="idx-pts ${dir}">${pts>=0?'+':''}${pts.toFixed(2)}</span>`;
+      const pctStr = (chg===0 && isVix) ? '<span class="idx-pct" style="color:var(--muted)">UNCH</span>' : `<span class="idx-pct ${dir}">${fP(chg)}</span>`;
+      const priceStr = fIdx(i.price);
+      const dateStr = DATA.date || '';
+      return `<div class="idx-card ${borderCls}"><div class="idx-top"><span class="idx-name">${i.name||i.ticker}</span><span class="idx-price">${priceStr}</span></div><div class="idx-detail"><span class="idx-arrow ${dir}">${arrow}</span>${ptsStr}${pctStr}</div><div class="idx-date">LAST | ${dateStr}</div></div>`;
+    }).join('');
   }
 
   const spx = DATA.indices.find(i => i.ticker==='^GSPC' || i.ticker==='SPY' || (i.name||'').includes('S&P'));
@@ -364,9 +385,11 @@ fetch('data.json', { cache: 'no-store' }).then(r => {
 // --- LIVE TICKER STRIP ---
 const LIVE_CRYPTO = 'bitcoin,ethereum,solana';
 const LIVE_INDICES = [
+  { sym: '^DJI',  label: 'DJIA' },
   { sym: '^GSPC', label: 'S&P 500' },
-  { sym: '^IXIC', label: 'Nasdaq' },
-  { sym: '^DJI',  label: 'Dow' },
+  { sym: '^IXIC', label: 'NASDAQ' },
+  { sym: '^RUT',  label: 'RUSS 2K' },
+  { sym: '^VIX',  label: 'VIX' },
 ];
 const LIVE_STOCKS = ['NVDA','AAPL','TSLA'];
 let prevPrices = {};

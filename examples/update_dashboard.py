@@ -56,21 +56,27 @@ def generate_data_json():
         "date": datetime.now(PT).strftime("%Y-%m-%d"),
     }
 
-    INDEX_MAP = {
-        "^GSPC": "S&P 500",
-        "^IXIC": "Nasdaq",
-        "^DJI": "Dow Jones",
-        "^RUT": "Russell 2000",
-    }
+    INDEX_MAP = [
+        ("^DJI",  "DJIA"),
+        ("^GSPC", "S&P 500"),
+        ("^IXIC", "NASDAQ"),
+        ("^RUT",  "RUSS 2K"),
+        ("^VIX",  "VIX"),
+    ]
     indices = []
-    for t, name in INDEX_MAP.items():
+    for t, name in INDEX_MAP:
         try:
             q = us_stocks.get_quote(t)
             h = us_stocks.get_history(t, period="1mo", interval="1d")
-            chg = q.get("change_pct")
+            chg_pct = q.get("change_pct")
+            price = q.get("price")
+            prev = q.get("previous_close")
+            change_pts = round(price - prev, 2) if price and prev else None
             indices.append({
-                "ticker": t, "name": name, "price": q["price"],
-                "change_pct": round(chg * 100, 2) if chg else None,
+                "ticker": t, "name": name, "price": price,
+                "change_pts": change_pts,
+                "change_pct": round(chg_pct * 100, 2) if chg_pct else None,
+                "previous_close": prev,
                 "history": h["Close"].tolist(),
                 "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index],
             })

@@ -38,7 +38,13 @@ SIGNAL_CN = {
 }
 WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 
-INDICES = ["SPY", "QQQ", "DIA", "IWM"]
+INDICES = [
+    ("^DJI",  "DJIA"),
+    ("^GSPC", "S&P 500"),
+    ("^IXIC", "NASDAQ"),
+    ("^RUT",  "Russell 2000"),
+    ("^VIX",  "VIX"),
+]
 MEGACAPS = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
 SECTORS = ["XLE", "XLF", "XLK", "XLV", "XLI", "XLC", "XLP", "XLRE", "XLU", "XLB"]
 COMMODITIES_ETFS = ["USO", "GLD", "SLV", "TLT", "UUP"]
@@ -202,16 +208,20 @@ def generate_report() -> str:
     # ---- US EQUITIES ----
     lines.append("## US Equities\n")
     lines.append("### Indices\n")
-    lines.append("| Ticker | Price | 1d% | 5d% | 10d% | vs SMA5 | vs SMA20 | RSI | Vol(ann) | Signal |")
-    lines.append("|--------|-------|-----|-----|------|---------|----------|-----|----------|--------|")
+    lines.append("| Index | Level | Chg | 1d% | 5d% | 10d% | vs SMA5 | vs SMA20 | RSI | Vol(ann) | Signal |")
+    lines.append("|-------|-------|-----|-----|-----|------|---------|----------|-----|----------|--------|")
 
-    for ticker in INDICES:
+    for ticker, name in INDICES:
         q = safe_quote(ticker)
         hist = safe_history(ticker)
         tech = compute_technicals(hist["Close"]) if not hist.empty else {}
         sig = direction_signal(tech)
+        price = q.get("price")
+        prev = q.get("previous_close")
+        pts = round(price - prev, 2) if price and prev else None
         lines.append(
-            f"| {ticker} | {fmt(q.get('price'), prefix='$')} "
+            f"| {name} | {fmt(price, 2)} "
+            f"| {fmt(pts, 2, prefix='+' if pts and pts >= 0 else '')} "
             f"| {fmt(tech.get('ret_1d'), suffix='%')} "
             f"| {fmt(tech.get('ret_5d'), suffix='%')} "
             f"| {fmt(tech.get('ret_10d'), suffix='%')} "
@@ -332,18 +342,18 @@ def generate_report() -> str:
     # ---- PREDICTION SUMMARY ----
     lines.append("\n## Prediction Summary\n")
 
-    spy_hist = safe_history("SPY")
-    spy_tech = compute_technicals(spy_hist["Close"]) if not spy_hist.empty else {}
-    spy_sig = direction_signal(spy_tech)
+    spx_hist = safe_history("^GSPC")
+    spx_tech = compute_technicals(spx_hist["Close"]) if not spx_hist.empty else {}
+    spx_sig = direction_signal(spx_tech)
 
-    lines.append(f"**Overall Market Signal: {spy_sig}**\n")
+    lines.append(f"**Overall Market Signal: {spx_sig}**\n")
     lines.append("| Asset | Tomorrow | Next Week | Key Levels |")
     lines.append("|-------|----------|-----------|------------|")
 
-    if spy_tech:
-        spy_support = spy_tech["low_20d"]
-        spy_resist = spy_tech["sma20"] if spy_tech["sma20"] else spy_tech["sma5"]
-        lines.append(f"| SPY | {spy_sig} | {spy_sig} | Support: ${spy_support:.2f}, Resist: ${spy_resist:.2f} |")
+    if spx_tech:
+        spx_support = spx_tech["low_20d"]
+        spx_resist = spx_tech["sma20"] if spx_tech["sma20"] else spx_tech["sma5"]
+        lines.append(f"| S&P 500 | {spx_sig} | {spx_sig} | Support: {spx_support:,.0f}, Resist: {spx_resist:,.0f} |")
 
     for pair, coin_id in [("BTC/USDT", "bitcoin"), ("ETH/USDT", "ethereum")]:
         try:
@@ -406,18 +416,22 @@ def generate_report_cn() -> str:
     # ---- 美股 ----
     lines.append("## 美股市场\n")
     lines.append("### 主要指数\n")
-    lines.append("| 代码 | 价格 | 日涨跌 | 5日涨跌 | 10日涨跌 | vs 5日均线 | vs 20日均线 | RSI | 年化波动率 | 信号 |")
-    lines.append("|------|------|--------|---------|----------|-----------|------------|-----|----------|------|")
+    lines.append("| 指数 | 点位 | 涨跌 | 日涨跌% | 5日% | 10日% | vs 5日均线 | vs 20日均线 | RSI | 年化波动率 | 信号 |")
+    lines.append("|------|------|------|---------|------|-------|-----------|------------|-----|----------|------|")
 
-    for ticker in INDICES:
+    for ticker, name in INDICES:
         q = safe_quote(ticker)
         hist = safe_history(ticker)
         tech = compute_technicals(hist["Close"]) if not hist.empty else {}
         sig = direction_signal(tech)
         sma5_cn = "上方" if tech.get("trend_sma5") == "above" else "下方"
         sma20_cn = "上方" if tech.get("trend_sma20") == "above" else ("下方" if tech.get("trend_sma20") == "below" else "N/A")
+        price = q.get("price")
+        prev = q.get("previous_close")
+        pts = round(price - prev, 2) if price and prev else None
         lines.append(
-            f"| {ticker} | {fmt(q.get('price'), prefix='$')} "
+            f"| {name} | {fmt(price, 2)} "
+            f"| {fmt(pts, 2, prefix='+' if pts and pts >= 0 else '')} "
             f"| {fmt(tech.get('ret_1d'), suffix='%')} "
             f"| {fmt(tech.get('ret_5d'), suffix='%')} "
             f"| {fmt(tech.get('ret_10d'), suffix='%')} "
@@ -547,18 +561,18 @@ def generate_report_cn() -> str:
     # ---- 预测总结 ----
     lines.append("\n## 预测总结\n")
 
-    spy_hist = safe_history("SPY")
-    spy_tech = compute_technicals(spy_hist["Close"]) if not spy_hist.empty else {}
-    spy_sig = direction_signal(spy_tech)
+    spx_hist = safe_history("^GSPC")
+    spx_tech = compute_technicals(spx_hist["Close"]) if not spx_hist.empty else {}
+    spx_sig = direction_signal(spx_tech)
 
-    lines.append(f"**整体市场信号: {translate_signal(spy_sig)}**\n")
+    lines.append(f"**整体市场信号: {translate_signal(spx_sig)}**\n")
     lines.append("| 资产 | 明日预测 | 下周预测 | 关键价位 |")
     lines.append("|------|---------|---------|---------|")
 
-    if spy_tech:
-        spy_support = spy_tech["low_20d"]
-        spy_resist = spy_tech["sma20"] if spy_tech["sma20"] else spy_tech["sma5"]
-        lines.append(f"| SPY | {translate_signal(spy_sig)} | {translate_signal(spy_sig)} | 支撑: ${spy_support:.2f}, 阻力: ${spy_resist:.2f} |")
+    if spx_tech:
+        spx_support = spx_tech["low_20d"]
+        spx_resist = spx_tech["sma20"] if spx_tech["sma20"] else spx_tech["sma5"]
+        lines.append(f"| S&P 500 | {translate_signal(spx_sig)} | {translate_signal(spx_sig)} | 支撑: {spx_support:,.0f}, 阻力: {spx_resist:,.0f} |")
 
     for pair, coin_id in [("BTC/USDT", "bitcoin"), ("ETH/USDT", "ethereum")]:
         try:
