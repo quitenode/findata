@@ -72,14 +72,31 @@ def generate_data_json():
             price = q.get("price")
             prev = q.get("previous_close")
             change_pts = round(price - prev, 2) if price and prev else None
-            indices.append({
+            entry = {
                 "ticker": t, "name": name, "price": price,
                 "change_pts": change_pts,
                 "change_pct": round(chg_pct * 100, 2) if chg_pct else None,
                 "previous_close": prev,
                 "history": h["Close"].tolist(),
                 "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index],
-            })
+            }
+            if t == "^GSPC":
+                entry["ohlc"] = [
+                    {
+                        "time": str(d.date()) if hasattr(d, "date") else str(d)[:10],
+                        "open": row["Open"], "high": row["High"],
+                        "low": row["Low"], "close": row["Close"],
+                    }
+                    for d, row in h.iterrows()
+                ]
+                entry["volume"] = [
+                    {
+                        "time": str(d.date()) if hasattr(d, "date") else str(d)[:10],
+                        "value": row["Volume"],
+                    }
+                    for d, row in h.iterrows()
+                ]
+            indices.append(entry)
         except Exception:
             pass
     data["indices"] = indices

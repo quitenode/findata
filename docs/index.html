@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>findata Markets</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
 :root {
@@ -147,7 +148,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="idx-banner" id="idxRow"></div>
   <div class="layout">
     <div class="left-col">
-      <div class="card"><div class="card-title">S&P 500 — 30 Day</div><div class="chart-box"><canvas id="spyChart"></canvas></div></div>
+      <div class="card"><div class="card-title">S&P 500 — 30 Day</div><div class="chart-box" id="spxChartContainer"></div></div>
       <div class="card"><div class="card-title">Mega-Cap Stocks</div><table id="megaTable"><thead><tr><th>Ticker</th><th>Price</th><th>Chg%</th><th>MktCap</th><th>P/E</th><th>30d</th></tr></thead><tbody></tbody></table></div>
       <div class="card"><div class="card-title">Commodities & Safe Havens</div><table id="cmdtyTable"><thead><tr><th>Asset</th><th>Price</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
     </div>
@@ -244,6 +245,54 @@ function spark(el, data, color) {
   } catch (e) { console.warn('spark', e); }
 }
 
+// -- S&P 500 TradingView Candlestick --
+function renderSpxCandlestick(spx) {
+  const el = document.getElementById('spxChartContainer');
+  if (!el || typeof LightweightCharts === 'undefined') return;
+  if (!spx) { el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:60px 0">No S&P 500 data</p>'; return; }
+
+  el.innerHTML = '';
+  const chart = LightweightCharts.createChart(el, {
+    width: el.clientWidth,
+    height: 220,
+    layout: { background: { color: '#111827' }, textColor: '#64748b', fontFamily: "-apple-system, 'Segoe UI', sans-serif", fontSize: 11 },
+    grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: { color: '#3b82f6', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#3b82f6' }, horzLine: { color: '#3b82f6', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#3b82f6' } },
+    rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.08, bottom: 0.15 } },
+    timeScale: { borderColor: '#1e293b', timeVisible: false, fixLeftEdge: true, fixRightEdge: true },
+    handleScroll: false,
+    handleScale: false,
+  });
+
+  const candleSeries = chart.addCandlestickSeries({
+    upColor: '#22c55e', downColor: '#ef4444',
+    borderUpColor: '#22c55e', borderDownColor: '#ef4444',
+    wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+  });
+
+  if (spx.ohlc && spx.ohlc.length) {
+    candleSeries.setData(spx.ohlc);
+  } else if (spx.history && spx.dates) {
+    candleSeries.setData(spx.dates.map((d,i) => ({ time: d, open: spx.history[i], high: spx.history[i], low: spx.history[i], close: spx.history[i] })));
+  }
+
+  if (spx.volume && spx.volume.length) {
+    const volSeries = chart.addHistogramSeries({
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'vol',
+    });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+    volSeries.setData(spx.volume.map(v => ({
+      time: v.time,
+      value: v.value,
+      color: v.value > 0 ? 'rgba(59,130,246,0.25)' : 'rgba(59,130,246,0.15)',
+    })));
+  }
+
+  chart.timeScale().fitContent();
+  new ResizeObserver(() => { chart.applyOptions({ width: el.clientWidth }); }).observe(el);
+}
+
 // -- MARKETS --
 function renderMarkets() {
   if (!DATA.indices.length && !DATA.megacaps.length) {
@@ -265,7 +314,7 @@ function renderMarkets() {
   }
 
   const spx = DATA.indices.find(i => i.ticker==='^GSPC' || i.ticker==='SPY' || (i.name||'').includes('S&P'));
-  if(spx) mkChart(document.getElementById('spyChart'), spx.dates, spx.history, '#3b82f6');
+  renderSpxCandlestick(spx);
 
   const sb = document.getElementById('sectorBars');
   const mx = Math.max(...(DATA.sectors.length ? DATA.sectors.map(s=>Math.abs(s.ret_5d||0)) : [1]), 1);
