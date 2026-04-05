@@ -2,6 +2,8 @@
 
 A Python toolkit for financial data acquisition covering US stocks, crypto, forex, macro economy, news, and Reddit sentiment. 14 data sources, 10 modules.
 
+**Repository:** [github.com/quitenode/findata](https://github.com/quitenode/findata)
+
 ## Setup
 
 ```bash
@@ -206,9 +208,20 @@ export FMP_API_KEY="your_key"
 
 Add to `~/.bashrc` to persist across sessions.
 
+## MCP (Claude, OpenClaw, other clients)
+
+Expose the same data as [Model Context Protocol](https://modelcontextprotocol.io/) tools. Install [FastMCP](https://github.com/jlowin/fastmcp) and run from the **repository root** so the `findata` package resolves:
+
+```bash
+pip install fastmcp
+PYTHONPATH=. fastmcp run findata/mcp_server.py
+```
+
+Tool catalog and agent-oriented notes: [SKILLS.md](SKILLS.md).
+
 ## Dashboard
 
-Live dashboard: **https://quitenode.github.io/findata/**
+Live site (GitHub Pages from the `docs/` folder on `main`): **https://quitenode.github.io/findata/**
 
 - Live price ticker (BTC, ETH, SOL, SPY, QQQ, NVDA) -- updates every 30 seconds
 - Charts, sector heatmap, Reddit sentiment
