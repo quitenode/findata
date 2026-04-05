@@ -281,6 +281,7 @@ function normalizeSnapshot(raw) {
     reports: Array.isArray(o.reports) ? o.reports : [],
     crypto_trending: Array.isArray(o.crypto_trending) ? o.crypto_trending : [],
     crypto_indicators: Array.isArray(o.crypto_indicators) ? o.crypto_indicators : [],
+    all_stocks: Array.isArray(o.all_stocks) ? o.all_stocks : [],
   };
 }
 
@@ -471,7 +472,8 @@ function loadStockChart(ticker) {
   renderTVChart(ticker);
 
   // Try pre-computed data from data.json first (Yahoo CORS blocks browser)
-  const cached = DATA.megacaps.find(m => m.ticker === ticker);
+  const cached = DATA.megacaps.find(m => m.ticker === ticker)
+    || DATA.all_stocks.find(m => m.ticker === ticker);
   if (cached) {
     renderCachedQuote(cached);
     renderCachedTechnicals(cached);

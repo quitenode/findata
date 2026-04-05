@@ -17,6 +17,7 @@ REPO_DIR = os.path.join(os.path.dirname(__file__), "..")
 DOCS_DIR = os.path.join(REPO_DIR, "docs")
 PRED_DIR = os.path.join(REPO_DIR, "predictions")
 
+import pandas as pd
 from findata import us_stocks, crypto, reddit_sentiment as reddit
 
 DATA_JSON_PATH = os.path.join(DOCS_DIR, "data.json")
@@ -189,21 +190,93 @@ def generate_data_json():
             pass
     data["indices"] = indices
 
-    megacaps = []
-    for t in ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]:
+    # ---- All stocks: S&P 500 + Nasdaq 100 (batch fetch) ----
+    import io as _io
+    MEGACAP_TICKERS = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
+
+    all_tickers = set(MEGACAP_TICKERS)
+    try:
+        import requests as _req
+        _hdrs = {"User-Agent": "Mozilla/5.0"}
+        r = _req.get("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", headers=_hdrs, timeout=10)
+        sp = pd.read_html(_io.StringIO(r.text))[0]
+        all_tickers |= set(sp["Symbol"].str.replace(".", "-", regex=False).tolist())
+        r2 = _req.get("https://en.wikipedia.org/wiki/Nasdaq-100", headers=_hdrs, timeout=10)
+        ndx_tables = pd.read_html(_io.StringIO(r2.text))
+        for _t in ndx_tables:
+            if "Ticker" in _t.columns:
+                all_tickers |= set(_t["Ticker"].astype(str).str.replace(".", "-", regex=False).tolist())
+                break
+        print(f"  Universe: {len(all_tickers)} tickers (S&P 500 + Nasdaq 100)")
+    except Exception as e:
+        print(f"  Warning: could not fetch index constituents: {e}")
+
+    all_tickers = sorted(all_tickers)
+    import yfinance as yf
+
+    # Batch download 3-month OHLCV for all tickers
+    print(f"  Downloading 3mo history for {len(all_tickers)} tickers...")
+    batch_data = yf.download(" ".join(all_tickers), period="3mo", interval="1d", group_by="ticker", progress=False, threads=True)
+
+    # Fetch quotes individually (fast_info) — in batches of Tickers objects
+    BATCH_SZ = 50
+    all_quotes = {}
+    for i in range(0, len(all_tickers), BATCH_SZ):
+        chunk = all_tickers[i:i+BATCH_SZ]
         try:
-            q = us_stocks.get_quote(t)
-            h = us_stocks.get_history(t, period="3mo", interval="1d")
-            chg = q.get("change_pct")
+            tks = yf.Tickers(" ".join(chunk))
+            for sym in chunk:
+                try:
+                    fi = tks.tickers[sym].fast_info
+                    info = tks.tickers[sym].info
+                    all_quotes[sym] = {
+                        "price": fi.get("lastPrice"),
+                        "previous_close": fi.get("previousClose"),
+                        "market_cap": fi.get("marketCap"),
+                        "pe": info.get("trailingPE"),
+                        "eps": info.get("trailingEps"),
+                        "forward_pe": info.get("forwardPE"),
+                        "dividend_yield": info.get("dividendYield"),
+                        "52w_high": fi.get("yearHigh"),
+                        "52w_low": fi.get("yearLow"),
+                        "name": info.get("shortName") or info.get("longName", sym),
+                        "sector": info.get("sector"),
+                        "industry": info.get("industry"),
+                    }
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    print(f"  Quotes fetched: {len(all_quotes)}")
+
+    megacaps = []
+    all_stocks = []
+    for t in all_tickers:
+        try:
+            q = all_quotes.get(t)
+            if not q or not q.get("price"):
+                continue
+            # Extract OHLCV from batch data
+            if len(all_tickers) > 1 and t in batch_data.columns.get_level_values(0):
+                h = batch_data[t].dropna(how="all")
+            else:
+                h = batch_data.dropna(how="all")
+            if h.empty or "Close" not in h.columns:
+                continue
+
+            chg_pct = None
+            if q["price"] and q.get("previous_close"):
+                chg_pct = round((q["price"] / q["previous_close"] - 1) * 100, 2)
+
             entry = {
                 "ticker": t, "name": q.get("name", ""), "price": q["price"],
-                "change_pct": round(chg * 100, 2) if chg else None,
-                "market_cap": q.get("market_cap"), "pe": q.get("pe_ratio"),
+                "change_pct": chg_pct,
+                "market_cap": q.get("market_cap"), "pe": q.get("pe"),
                 "eps": q.get("eps"), "forward_pe": q.get("forward_pe"),
                 "dividend_yield": q.get("dividend_yield"),
                 "52w_high": q.get("52w_high"), "52w_low": q.get("52w_low"),
                 "sector": q.get("sector"), "industry": q.get("industry"),
-                "history": h["Close"].tolist()[-22:],
+                "history": h["Close"].dropna().tolist()[-22:],
                 "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index][-22:],
             }
 
@@ -214,28 +287,34 @@ def generate_data_json():
             if len(closes) >= 14:
                 entry["technicals"] = _compute_technicals(closes, highs, lows, volumes)
 
-            try:
-                news_items = us_stocks.get_news(t)
-                entry["news"] = news_items[:8]
-            except Exception:
-                entry["news"] = []
+            all_stocks.append(entry)
 
-            try:
-                ar = us_stocks.get_analyst_ratings(t)
-                entry["analyst"] = {
-                    "target_mean": ar.get("target_mean"),
-                    "target_high": ar.get("target_high"),
-                    "target_low": ar.get("target_low"),
-                    "recommendation": ar.get("recommendation"),
-                    "num_analysts": ar.get("num_analysts"),
-                }
-            except Exception:
-                pass
-
-            megacaps.append(entry)
+            if t in MEGACAP_TICKERS:
+                mega_entry = dict(entry)
+                try:
+                    news_items = us_stocks.get_news(t)
+                    mega_entry["news"] = news_items[:8]
+                except Exception:
+                    mega_entry["news"] = []
+                try:
+                    ar = us_stocks.get_analyst_ratings(t)
+                    mega_entry["analyst"] = {
+                        "target_mean": ar.get("target_mean"),
+                        "target_high": ar.get("target_high"),
+                        "target_low": ar.get("target_low"),
+                        "recommendation": ar.get("recommendation"),
+                        "num_analysts": ar.get("num_analysts"),
+                    }
+                except Exception:
+                    pass
+                megacaps.append(mega_entry)
         except Exception:
             pass
+
+    megacaps.sort(key=lambda x: x.get("market_cap") or 0, reverse=True)
     data["megacaps"] = megacaps
+    data["all_stocks"] = all_stocks
+    print(f"  Stocks: {len(all_stocks)} total, {len(megacaps)} mega-caps with news")
 
     sector_names = {
         "XLE": "Energy", "XLF": "Finance", "XLK": "Tech", "XLV": "Healthcare",
