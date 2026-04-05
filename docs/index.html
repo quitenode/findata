@@ -607,15 +607,19 @@ function renderCachedTechnicals(s) {
 
 function renderCachedNews(s) {
   const panel = document.getElementById('stockNewsPanel');
-  const articles = s.news || [];
+  const articles = (s.news || []).filter(a => a.title);
   if (!articles.length) { panel.style.display = 'none'; return; }
 
   panel.style.display = 'block';
   panel.innerHTML = `
     <div class="card-title">News & Headlines — ${s.ticker}</div>
     ${articles.map(a => {
-      const date = a.published ? new Date(a.published * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-      return `<div class="stock-news-item"><a href="${a.link||'#'}" target="_blank" rel="noopener">${a.title||'Untitled'}</a><div class="sn-meta">${a.publisher||''}${date?' · '+date:''}</div></div>`;
+      let date = '';
+      if (a.published) {
+        const d = typeof a.published === 'number' ? new Date(a.published * 1000) : new Date(a.published);
+        if (!isNaN(d)) date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+      return `<div class="stock-news-item"><a href="${a.link||'#'}" target="_blank" rel="noopener">${a.title}</a><div class="sn-meta">${a.publisher||''}${date?' · '+date:''}</div></div>`;
     }).join('')}
   `;
 }

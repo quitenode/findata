@@ -121,16 +121,19 @@ def get_news(ticker: str) -> list[dict]:
     """Get recent news headlines for a ticker."""
     t = yf.Ticker(ticker)
     news = t.news or []
-    return [
-        {
-            "title": item.get("title", ""),
-            "publisher": item.get("publisher", ""),
-            "link": item.get("link", ""),
-            "published": item.get("providerPublishTime", ""),
-            "type": item.get("type", ""),
-        }
-        for item in news[:15]
-    ]
+    results = []
+    for item in news[:15]:
+        c = item.get("content") or item
+        provider = c.get("provider", {})
+        canon = c.get("canonicalUrl") or c.get("clickThroughUrl") or {}
+        results.append({
+            "title": c.get("title") or item.get("title", ""),
+            "publisher": provider.get("displayName") if isinstance(provider, dict) else (c.get("publisher") or item.get("publisher", "")),
+            "link": canon.get("url") if isinstance(canon, dict) else (c.get("link") or item.get("link", "")),
+            "published": c.get("pubDate") or item.get("providerPublishTime", ""),
+            "type": c.get("contentType") or item.get("type", ""),
+        })
+    return results
 
 
 def get_options_chain(ticker: str, expiration: str | None = None) -> dict:
