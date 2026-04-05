@@ -232,10 +232,13 @@ tr:hover { background: rgba(59,130,246,0.04); }
 <div class="page" id="crypto">
   <div class="crypto-row" id="cryptoCards"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="cryptoCharts"></div>
-  <!-- On-chain indicators from Google Sheet -->
+  <!-- On-chain indicators from Google Sheet (live fetch, auto-refresh hourly) -->
   <div class="card" style="margin-top:16px" id="cryptoIndicatorsCard">
-    <div class="card-title">BTC On-Chain Indicators <a href="https://docs.google.com/spreadsheets/d/1hLWDubMLBkekQ2jxkx_GV1JpLNivgERHSFBLzRtSkKk/edit" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">Open Sheet</a></div>
-    <div id="cryptoIndicators"></div>
+    <div class="card-title">BTC On-Chain Indicators
+      <a href="https://docs.google.com/spreadsheets/d/1hLWDubMLBkekQ2jxkx_GV1JpLNivgERHSFBLzRtSkKk/edit" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">Open Sheet</a>
+      <span id="ciRefreshTime" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:auto"></span>
+    </div>
+    <div id="cryptoIndicators"><p style="color:var(--muted)">Loading indicators from Google Sheet...</p></div>
   </div>
   <div class="card" style="margin-top:16px"><div class="card-title">Trending Coins</div><div id="trendCoins"></div></div>
 </div>
@@ -859,21 +862,90 @@ function renderCrypto() {
     document.getElementById('trendCoins').innerHTML = trending.length ? trending.map(t => `<div style="padding:4px 0;font-size:13px">#${t.rank} <strong>${t.name}</strong> (${t.symbol}) — Rank ${t.market_cap_rank||'N/A'}</div>`).join('') : '<div style="color:var(--muted)">No trending data</div>';
   } catch(e) {}
 
-  // On-chain indicators from Google Sheet
-  renderCryptoIndicators();
+  // On-chain indicators: fetch live from Google Sheet (CORS allowed)
+  fetchCryptoIndicatorsLive();
 }
 
-function renderCryptoIndicators() {
+const CI_SHEET_CSV = 'https://docs.google.com/spreadsheets/d/1hLWDubMLBkekQ2jxkx_GV1JpLNivgERHSFBLzRtSkKk/export?format=csv&gid=0';
+let ciRefreshTimer = null;
+
+async function fetchCryptoIndicatorsLive() {
   const container = document.getElementById('cryptoIndicators');
   const card = document.getElementById('cryptoIndicatorsCard');
-  const indicators = DATA.crypto_indicators || [];
+  const timeEl = document.getElementById('ciRefreshTime');
 
-  if (!indicators.length) {
-    card.style.display = 'none';
-    return;
+  try {
+    const r = await fetch(CI_SHEET_CSV, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    const rows = parseCSV(text);
+    if (rows.length < 2) throw new Error('Empty sheet');
+
+    const dateHeaders = rows[0].slice(3);
+    const indicators = [];
+    for (let ri = 1; ri < rows.length; ri++) {
+      const row = rows[ri];
+      const name = (row[0] || '').trim();
+      if (!name) continue;
+      const link = (row[1] || '').trim();
+      const vals = row.slice(3);
+      const history = [];
+      for (let i = 0; i < vals.length && i < dateHeaders.length; i++) {
+        const v = (vals[i] || '').trim();
+        if (v) history.push({ date: (dateHeaders[i]||'').trim(), value: v });
+      }
+      const latest = history[0] || {};
+      const prev = history[1] || {};
+      indicators.push({ name, link, value: latest.value||'', date: latest.date||'', prev_value: prev.value||'', prev_date: prev.date||'', history: history.slice(0,8) });
+    }
+
+    renderCryptoIndicatorsTable(container, card, indicators);
+    timeEl.textContent = 'Live · ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  } catch (e) {
+    console.warn('fetchCryptoIndicatorsLive', e);
+    // Fallback to data.json cached version
+    const cached = DATA.crypto_indicators || [];
+    if (cached.length) {
+      renderCryptoIndicatorsTable(container, card, cached);
+      timeEl.textContent = 'Cached · ' + (DATA.generated || '');
+    } else {
+      container.innerHTML = '<p style="color:var(--muted)">Could not load indicators</p>';
+    }
   }
-  card.style.display = 'block';
 
+  // Auto-refresh every hour
+  if (!ciRefreshTimer) {
+    ciRefreshTimer = setInterval(fetchCryptoIndicatorsLive, 60 * 60 * 1000);
+  }
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let current = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i+1] === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { current.push(field); field = ''; }
+      else if (ch === '\n' || (ch === '\r' && text[i+1] === '\n')) {
+        current.push(field); field = '';
+        rows.push(current); current = [];
+        if (ch === '\r') i++;
+      } else { field += ch; }
+    }
+  }
+  if (field || current.length) { current.push(field); rows.push(current); }
+  return rows;
+}
+
+function renderCryptoIndicatorsTable(container, card, indicators) {
+  card.style.display = 'block';
   const SKIP = ['减半后500天', '下次减半前500天'];
   const filtered = indicators.filter(i => !SKIP.includes(i.name) && i.value);
 
@@ -896,9 +968,8 @@ function renderCryptoIndicators() {
       ? `<span class="ci-prev">${ind.prev_date}: ${ind.prev_value}</span>`
       : '';
 
-    // Mini sparkline from history (numeric values only)
     let sparkHtml = '';
-    const nums = (ind.history || []).map(h => parseFloat(h.value.replace(/[^0-9.\-]/g,''))).filter(n => !isNaN(n)).reverse();
+    const nums = (ind.history || []).map(h => parseFloat((h.value||'').replace(/[^0-9.\-]/g,''))).filter(n => !isNaN(n)).reverse();
     if (nums.length >= 3) {
       const mx = Math.max(...nums);
       const mn = Math.min(...nums);
