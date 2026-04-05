@@ -138,7 +138,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="idx-row" id="idxRow"></div>
   <div class="layout">
     <div class="left-col">
-      <div class="card"><div class="card-title">S&P 500 (SPY) — 30 Day</div><div class="chart-box"><canvas id="spyChart"></canvas></div></div>
+      <div class="card"><div class="card-title">S&P 500 — 30 Day</div><div class="chart-box"><canvas id="spyChart"></canvas></div></div>
       <div class="card"><div class="card-title">Mega-Cap Stocks</div><table id="megaTable"><thead><tr><th>Ticker</th><th>Price</th><th>Chg%</th><th>MktCap</th><th>P/E</th><th>30d</th></tr></thead><tbody></tbody></table></div>
       <div class="card"><div class="card-title">Commodities & Safe Havens</div><table id="cmdtyTable"><thead><tr><th>Asset</th><th>Price</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
     </div>
@@ -184,6 +184,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
 <script>
 let DATA = {};
 const fN = n => { if(n==null) return 'N/A'; if(Math.abs(n)>=1e12) return `$${(n/1e12).toFixed(2)}T`; if(Math.abs(n)>=1e9) return `$${(n/1e9).toFixed(0)}B`; if(Math.abs(n)>=1e6) return `$${(n/1e6).toFixed(1)}M`; return `$${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`; };
+const fIdx = n => { if(n==null) return 'N/A'; return n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };
 const fP = n => n==null?'N/A':`${n>=0?'+':''}${n.toFixed(2)}%`;
 const cls = n => n>=0?'up':'down';
 
@@ -239,11 +240,11 @@ function renderMarkets() {
   if (!DATA.indices.length && !DATA.megacaps.length) {
     document.getElementById('idxRow').innerHTML = '<div class="idx-card" style="flex:1 1 100%;min-width:100%;border-color:var(--orange)"><div class="idx-name">Market data</div><div class="idx-price" style="font-size:14px;font-weight:500">Snapshot empty or still loading</div><div class="idx-change" style="color:var(--muted);font-weight:400">Try a hard refresh. If this persists, the data refresh workflow may be blocked (Yahoo from GitHub Actions).</div></div>';
   } else {
-    document.getElementById('idxRow').innerHTML = DATA.indices.map(i => `<div class="idx-card"><div class="idx-name">${i.ticker}</div><div class="idx-price">${fN(i.price)}</div><div class="idx-change ${cls(i.change_pct)}">${fP(i.change_pct)}</div></div>`).join('');
+    document.getElementById('idxRow').innerHTML = DATA.indices.map(i => `<div class="idx-card"><div class="idx-name">${i.name || i.ticker}</div><div class="idx-price">${fIdx(i.price)}</div><div class="idx-change ${cls(i.change_pct)}">${fP(i.change_pct)}</div></div>`).join('');
   }
 
-  const spy = DATA.indices.find(i=>i.ticker==='SPY');
-  if(spy) mkChart(document.getElementById('spyChart'), spy.dates, spy.history, '#3b82f6');
+  const spx = DATA.indices.find(i => i.ticker==='^GSPC' || i.ticker==='SPY' || (i.name||'').includes('S&P'));
+  if(spx) mkChart(document.getElementById('spyChart'), spx.dates, spx.history, '#3b82f6');
 
   const sb = document.getElementById('sectorBars');
   const mx = Math.max(...(DATA.sectors.length ? DATA.sectors.map(s=>Math.abs(s.ret_5d||0)) : [1]), 1);
@@ -362,7 +363,12 @@ fetch('data.json', { cache: 'no-store' }).then(r => {
 
 // --- LIVE TICKER STRIP ---
 const LIVE_CRYPTO = 'bitcoin,ethereum,solana';
-const LIVE_STOCKS = ['SPY','QQQ','NVDA','AAPL','TSLA'];
+const LIVE_INDICES = [
+  { sym: '^GSPC', label: 'S&P 500' },
+  { sym: '^IXIC', label: 'Nasdaq' },
+  { sym: '^DJI',  label: 'Dow' },
+];
+const LIVE_STOCKS = ['NVDA','AAPL','TSLA'];
 let prevPrices = {};
 
 async function fetchLiveCrypto() {
@@ -375,16 +381,22 @@ async function fetchLiveCrypto() {
 
 async function fetchLiveStocks() {
   const out = [];
-  for (const sym of LIVE_STOCKS) {
+  const allSyms = [...LIVE_INDICES.map(i=>i.sym), ...LIVE_STOCKS];
+  for (const sym of allSyms) {
     try {
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`);
+      const encoded = encodeURIComponent(sym);
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`);
       const d = await r.json();
       const m = d.chart.result[0].meta;
       const prev = m.chartPreviousClose||m.previousClose;
-      out.push({ sym, price:m.regularMarketPrice, change: prev?((m.regularMarketPrice-prev)/prev)*100:null });
+      const idxInfo = LIVE_INDICES.find(i=>i.sym===sym);
+      const label = idxInfo ? idxInfo.label : sym;
+      const isIndex = !!idxInfo;
+      out.push({ sym: label, price:m.regularMarketPrice, change: prev?((m.regularMarketPrice-prev)/prev)*100:null, isIndex });
     } catch {
+      const idxInfo = LIVE_INDICES.find(i=>i.sym===sym);
       const f = DATA.indices?.find(i=>i.ticker===sym) || DATA.megacaps?.find(i=>i.ticker===sym);
-      if(f) out.push({ sym, price:f.price, change:f.change_pct });
+      if(f) out.push({ sym: idxInfo ? idxInfo.label : sym, price:f.price, change:f.change_pct, isIndex: !!idxInfo });
     }
   }
   return out;
@@ -392,7 +404,9 @@ async function fetchLiveStocks() {
 
 function renderTicker(items) {
   const html = items.map(i => {
-    const p = i.price>=1000 ? fN(i.price) : (i.price>=1?`$${i.price.toFixed(2)}`:`$${i.price.toFixed(4)}`);
+    const p = i.isIndex
+      ? i.price.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})
+      : (i.price>=1000 ? fN(i.price) : (i.price>=1?`$${i.price.toFixed(2)}`:`$${i.price.toFixed(4)}`));
     const c = i.change!=null ? fP(i.change) : '';
     return `<div class="tick"><span class="sym">${i.sym}</span><span class="tprice">${p}</span><span class="tchange ${cls(i.change)}">${c}</span></div>`;
   }).join('');
