@@ -50,6 +50,94 @@ def sanitize_for_json(obj):
     return obj
 
 
+def _compute_technicals(closes, highs, lows, volumes):
+    """Compute key technical indicators from OHLCV arrays."""
+    n = len(closes)
+    last = closes[-1]
+
+    def sma(arr, period):
+        return sum(arr[-period:]) / period if len(arr) >= period else None
+
+    def ema(arr, period):
+        if len(arr) < period:
+            return None
+        k = 2 / (period + 1)
+        e = sum(arr[:period]) / period
+        for v in arr[period:]:
+            e = v * k + e * (1 - k)
+        return e
+
+    sma5 = sma(closes, 5)
+    sma20 = sma(closes, 20)
+    sma50 = sma(closes, 50)
+    sma200 = sma(closes, 200)
+    ema12 = ema(closes, 12)
+    ema26 = ema(closes, 26)
+    macd = round(ema12 - ema26, 4) if ema12 and ema26 else None
+
+    rsi = None
+    if n >= 15:
+        changes = [closes[i+1] - closes[i] for i in range(n-1)]
+        recent = changes[-14:]
+        gains = sum(c for c in recent if c > 0) / 14
+        losses = sum(abs(c) for c in recent if c < 0) / 14
+        rsi = round(100 - (100 / (1 + gains / losses)), 1) if losses > 0 else 100.0
+
+    avg_vol = sma(volumes, 20)
+    vol_ratio = round(volumes[-1] / avg_vol, 2) if avg_vol and volumes else None
+
+    returns = [(closes[i+1] - closes[i]) / closes[i] for i in range(n-1)]
+    vol20 = round((sum(r*r for r in returns[-20:]) / min(20, len(returns))) ** 0.5 * 252**0.5 * 100, 1) if len(returns) >= 5 else None
+
+    bb_upper, bb_lower = None, None
+    if n >= 20:
+        s20 = closes[-20:]
+        mean = sum(s20) / 20
+        std = (sum((v - mean)**2 for v in s20) / 20) ** 0.5
+        bb_upper = round(mean + 2 * std, 2)
+        bb_lower = round(mean - 2 * std, 2)
+
+    high_3m = max(highs) if highs else None
+    low_3m = min(lows) if lows else None
+
+    def signal(val, bull_test, bear_test):
+        if bull_test:
+            return "bullish"
+        if bear_test:
+            return "bearish"
+        return "neutral"
+
+    indicators = {
+        "rsi": {"value": rsi, "signal": signal(rsi, rsi and rsi < 30, rsi and rsi > 70)},
+        "macd": {"value": macd, "signal": signal(macd, macd and macd > 0, macd and macd < 0)},
+        "sma20": {"value": round(sma20, 2) if sma20 else None, "signal": signal(sma20, sma20 and last > sma20, sma20 and last < sma20)},
+        "sma50": {"value": round(sma50, 2) if sma50 else None, "signal": signal(sma50, sma50 and last > sma50, sma50 and last < sma50)},
+        "sma200": {"value": round(sma200, 2) if sma200 else None, "signal": signal(sma200, sma200 and last > sma200, sma200 and last < sma200)},
+        "bollinger": {"upper": bb_upper, "lower": bb_lower, "signal": signal(None, bb_lower and last < bb_lower, bb_upper and last > bb_upper)},
+        "volatility": {"value": vol20, "signal": signal(vol20, False, vol20 and vol20 > 40)},
+        "volume_ratio": {"value": vol_ratio, "signal": signal(vol_ratio, vol_ratio and vol_ratio > 1.5, vol_ratio and vol_ratio < 0.5)},
+        "high_3m": {"value": round(high_3m, 2) if high_3m else None},
+        "low_3m": {"value": round(low_3m, 2) if low_3m else None},
+    }
+
+    score = 0
+    if rsi and rsi < 30: score += 2
+    elif rsi and rsi < 45: score += 1
+    elif rsi and rsi > 70: score -= 2
+    elif rsi and rsi > 55: score -= 1
+    if macd and macd > 0: score += 1
+    elif macd: score -= 1
+    if sma50 and last > sma50: score += 1
+    elif sma50: score -= 1
+    if sma200 and last > sma200: score += 1
+    elif sma200: score -= 1
+
+    overall = "Strong Buy" if score >= 3 else ("Buy" if score >= 1 else ("Strong Sell" if score <= -3 else ("Sell" if score <= -1 else "Neutral")))
+    indicators["overall"] = {"label": overall, "score": score}
+
+    return indicators
+
+
 def generate_data_json():
     data = {
         "generated": datetime.now(PT).strftime("%Y-%m-%d %H:%M %Z"),
@@ -105,15 +193,46 @@ def generate_data_json():
     for t in ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]:
         try:
             q = us_stocks.get_quote(t)
-            h = us_stocks.get_history(t, period="1mo", interval="1d")
+            h = us_stocks.get_history(t, period="3mo", interval="1d")
             chg = q.get("change_pct")
-            megacaps.append({
+            entry = {
                 "ticker": t, "name": q.get("name", ""), "price": q["price"],
                 "change_pct": round(chg * 100, 2) if chg else None,
                 "market_cap": q.get("market_cap"), "pe": q.get("pe_ratio"),
-                "history": h["Close"].tolist(),
-                "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index],
-            })
+                "eps": q.get("eps"), "forward_pe": q.get("forward_pe"),
+                "dividend_yield": q.get("dividend_yield"),
+                "52w_high": q.get("52w_high"), "52w_low": q.get("52w_low"),
+                "sector": q.get("sector"), "industry": q.get("industry"),
+                "history": h["Close"].tolist()[-22:],
+                "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index][-22:],
+            }
+
+            closes = h["Close"].dropna().tolist()
+            highs = h["High"].dropna().tolist()
+            lows = h["Low"].dropna().tolist()
+            volumes = h["Volume"].dropna().tolist()
+            if len(closes) >= 14:
+                entry["technicals"] = _compute_technicals(closes, highs, lows, volumes)
+
+            try:
+                news_items = us_stocks.get_news(t)
+                entry["news"] = news_items[:8]
+            except Exception:
+                entry["news"] = []
+
+            try:
+                ar = us_stocks.get_analyst_ratings(t)
+                entry["analyst"] = {
+                    "target_mean": ar.get("target_mean"),
+                    "target_high": ar.get("target_high"),
+                    "target_low": ar.get("target_low"),
+                    "recommendation": ar.get("recommendation"),
+                    "num_analysts": ar.get("num_analysts"),
+                }
+            except Exception:
+                pass
+
+            megacaps.append(entry)
         except Exception:
             pass
     data["megacaps"] = megacaps

@@ -470,10 +470,17 @@ function loadStockChart(ticker) {
   // Load TradingView widget
   renderTVChart(ticker);
 
-  // Fetch quote data, technicals, and news in parallel
-  fetchStockQuote(ticker);
-  fetchStockTechnicals(ticker);
-  fetchStockNews(ticker);
+  // Try pre-computed data from data.json first (Yahoo CORS blocks browser)
+  const cached = DATA.megacaps.find(m => m.ticker === ticker);
+  if (cached) {
+    renderCachedQuote(cached);
+    renderCachedTechnicals(cached);
+    renderCachedNews(cached);
+  } else {
+    fetchStockQuote(ticker);
+    fetchStockTechnicals(ticker);
+    fetchStockNews(ticker);
+  }
 }
 
 function renderTVChart(ticker) {
@@ -510,6 +517,107 @@ function renderTVChart(ticker) {
     support_host: 'https://www.tradingview.com',
   });
   widgetDiv.appendChild(script);
+}
+
+// -- Render from pre-computed data.json (no CORS issues) --
+function renderCachedQuote(s) {
+  const header = document.getElementById('stockChartHeader');
+  const panel = document.getElementById('stockInfoPanel');
+  const price = s.price;
+  const changePct = s.change_pct;
+  const change = s.price && changePct != null ? (price * changePct / (100 + changePct)) : null;
+  const dir = (changePct ?? 0) >= 0 ? 'up' : 'down';
+
+  header.innerHTML = `
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="font-size:20px;font-weight:800">${s.ticker}</span>
+      <span style="font-size:13px;color:var(--muted)">${s.name || ''}</span>
+      <span style="font-size:11px;color:var(--muted)">${s.sector||''} ${s.industry?'· '+s.industry:''}</span>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-top:4px">
+      <span style="font-size:28px;font-weight:800">${fN(price)}</span>
+      <span class="${dir}" style="font-size:16px;font-weight:700">${change!=null?(change>=0?'+':'')+change.toFixed(2):''} (${changePct!=null?fP(changePct):''})</span>
+    </div>
+  `;
+
+  const stats = [
+    { label: 'Market Cap', val: fN(s.market_cap) },
+    { label: 'P/E (TTM)', val: s.pe ? s.pe.toFixed(1) : '—' },
+    { label: 'Forward P/E', val: s.forward_pe ? s.forward_pe.toFixed(1) : '—' },
+    { label: 'EPS (TTM)', val: s.eps != null ? `$${s.eps.toFixed(2)}` : '—' },
+    { label: '52W High', val: s['52w_high'] != null ? `$${s['52w_high'].toFixed(2)}` : '—' },
+    { label: '52W Low', val: s['52w_low'] != null ? `$${s['52w_low'].toFixed(2)}` : '—' },
+    { label: 'Div Yield', val: s.dividend_yield != null ? (s.dividend_yield*100).toFixed(2)+'%' : '—' },
+  ];
+  if (s.analyst) {
+    stats.push({ label: 'Analyst Target', val: s.analyst.target_mean ? `$${s.analyst.target_mean.toFixed(2)}` : '—' });
+    stats.push({ label: 'Rating', val: (s.analyst.recommendation || '—').toUpperCase() });
+    stats.push({ label: '# Analysts', val: s.analyst.num_analysts ?? '—' });
+  }
+  panel.style.display = 'block';
+  panel.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:16px 24px">${stats.map(st => `<div class="stock-stat"><span class="stat-label">${st.label}</span><span class="stat-val">${st.val}</span></div>`).join('')}</div>`;
+}
+
+function renderCachedTechnicals(s) {
+  const panel = document.getElementById('stockTechPanel');
+  const tech = s.technicals;
+  if (!tech) { panel.style.display = 'none'; return; }
+
+  const f2 = v => v != null ? v.toFixed(2) : '—';
+  const sigCls = sig => sig === 'bullish' ? 'bullish' : (sig === 'bearish' ? 'bearish' : 'neutral');
+  const sigLabel = (key, sig) => {
+    if (key === 'rsi') return sig === 'bearish' ? 'Overbought' : (sig === 'bullish' ? 'Oversold' : 'Neutral');
+    if (key === 'macd') return sig === 'bullish' ? 'Bullish' : (sig === 'bearish' ? 'Bearish' : 'Neutral');
+    if (key === 'bollinger') return sig === 'bullish' ? 'Below Lower' : (sig === 'bearish' ? 'Above Upper' : 'In Band');
+    if (key === 'volatility') return tech.volatility.value > 40 ? 'High' : (tech.volatility.value < 15 ? 'Low' : 'Moderate');
+    if (key === 'volume_ratio') return sig === 'bullish' ? 'High' : (sig === 'bearish' ? 'Low' : 'Normal');
+    return sig === 'bullish' ? 'Above' : (sig === 'bearish' ? 'Below' : '—');
+  };
+
+  const ov = tech.overall || {};
+  const overallCls = ov.score >= 1 ? 'bullish' : (ov.score <= -1 ? 'bearish' : 'neutral');
+  const gaugePos = Math.max(0, Math.min(100, ((ov.score||0) + 5) / 10 * 100));
+  const last = s.price;
+
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="card-title">Technical Indicators</div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+      <span style="font-size:18px;font-weight:800">Overall: <span class="${overallCls}" style="font-size:18px">${ov.label||'—'}</span></span>
+      <div class="tech-gauge" style="flex:1;min-width:200px">
+        <span style="font-size:10px;color:var(--red);font-weight:600">SELL</span>
+        <div class="gauge-bar"><div class="gauge-marker" style="left:${gaugePos}%"></div></div>
+        <span style="font-size:10px;color:var(--green);font-weight:600">BUY</span>
+      </div>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-item"><div class="tech-label">RSI (14)</div><div class="tech-row"><span class="tech-val">${tech.rsi?.value??'—'}</span><span class="tech-signal ${sigCls(tech.rsi?.signal)}">${sigLabel('rsi',tech.rsi?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">MACD (12,26)</div><div class="tech-row"><span class="tech-val">${f2(tech.macd?.value)}</span><span class="tech-signal ${sigCls(tech.macd?.signal)}">${sigLabel('macd',tech.macd?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">SMA 50</div><div class="tech-row"><span class="tech-val">${f2(tech.sma50?.value)}</span><span class="tech-signal ${sigCls(tech.sma50?.signal)}">${sigLabel('sma',tech.sma50?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">SMA 200</div><div class="tech-row"><span class="tech-val">${f2(tech.sma200?.value)}</span><span class="tech-signal ${sigCls(tech.sma200?.signal)}">${sigLabel('sma',tech.sma200?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">SMA 20</div><div class="tech-row"><span class="tech-val">${f2(tech.sma20?.value)}</span><span class="tech-signal ${sigCls(tech.sma20?.signal)}">${sigLabel('sma',tech.sma20?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">Bollinger Bands</div><div class="tech-row"><span class="tech-val" style="font-size:12px">${f2(tech.bollinger?.lower)} — ${f2(tech.bollinger?.upper)}</span><span class="tech-signal ${sigCls(tech.bollinger?.signal)}">${sigLabel('bollinger',tech.bollinger?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">Volatility (20d ann.)</div><div class="tech-row"><span class="tech-val">${tech.volatility?.value!=null?tech.volatility.value+'%':'—'}</span><span class="tech-signal neutral">${sigLabel('volatility',tech.volatility?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">Volume vs Avg</div><div class="tech-row"><span class="tech-val">${tech.volume_ratio?.value!=null?tech.volume_ratio.value+'x':'—'}</span><span class="tech-signal ${sigCls(tech.volume_ratio?.signal)}">${sigLabel('volume_ratio',tech.volume_ratio?.signal)}</span></div></div>
+      <div class="tech-item"><div class="tech-label">3-Month High</div><div class="tech-row"><span class="tech-val">$${f2(tech.high_3m?.value)}</span><span class="tech-signal ${last>=tech.high_3m?.value*0.98?'bullish':'neutral'}">${last>=tech.high_3m?.value*0.98?'Near High':tech.high_3m?.value?((1-last/tech.high_3m.value)*100).toFixed(1)+'% off':'—'}</span></div></div>
+      <div class="tech-item"><div class="tech-label">3-Month Low</div><div class="tech-row"><span class="tech-val">$${f2(tech.low_3m?.value)}</span><span class="tech-signal ${last<=tech.low_3m?.value*1.02?'bearish':'neutral'}">${last<=tech.low_3m?.value*1.02?'Near Low':tech.low_3m?.value?((last/tech.low_3m.value-1)*100).toFixed(1)+'% above':'—'}</span></div></div>
+    </div>
+  `;
+}
+
+function renderCachedNews(s) {
+  const panel = document.getElementById('stockNewsPanel');
+  const articles = s.news || [];
+  if (!articles.length) { panel.style.display = 'none'; return; }
+
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="card-title">News & Headlines — ${s.ticker}</div>
+    ${articles.map(a => {
+      const date = a.published ? new Date(a.published * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="stock-news-item"><a href="${a.link||'#'}" target="_blank" rel="noopener">${a.title||'Untitled'}</a><div class="sn-meta">${a.publisher||''}${date?' · '+date:''}</div></div>`;
+    }).join('')}
+  `;
 }
 
 async function fetchStockQuote(ticker) {
