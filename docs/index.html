@@ -159,7 +159,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
     <div class="left-col">
       <div class="card"><div class="card-title">S&P 500 — 30 Day</div><div class="chart-box" id="spxChartContainer"></div></div>
       <div class="card"><div class="card-title">Mega-Cap Stocks</div><table id="megaTable"><thead><tr><th>Ticker</th><th>Price</th><th>Chg%</th><th>MktCap</th><th>P/E</th><th>30d</th></tr></thead><tbody></tbody></table></div>
-      <div class="card"><div class="card-title">Commodities & Safe Havens</div><table id="cmdtyTable"><thead><tr><th>Asset</th><th>Price</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><div class="card-title">Commodities & Safe Havens</div><table id="cmdtyTable"><thead><tr><th>Asset</th><th>Price</th><th>Chg</th><th>1d%</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="right-col">
       <div class="card"><div class="card-title">Sector Heatmap <span style="font-size:10px;color:var(--muted);text-transform:none;font-weight:400">(5-day)</span></div><div id="sectorBars"></div></div>
@@ -353,7 +353,14 @@ function renderMarkets() {
   document.querySelector('#megaTable tbody').innerHTML = DATA.megacaps.map((s,i) => `<tr><td><strong>${s.ticker}</strong></td><td>${fN(s.price)}</td><td class="${cls(s.change_pct)}">${fP(s.change_pct)}</td><td>${fN(s.market_cap)}</td><td>${s.pe?s.pe.toFixed(1):'—'}</td><td style="width:100px"><canvas id="ms_${i}" height="28"></canvas></td></tr>`).join('');
   DATA.megacaps.forEach((s,i) => { const c=document.getElementById(`ms_${i}`); if(c&&s.history) spark(c,s.history,s.change_pct>=0?'#22c55e':'#ef4444'); });
 
-  document.querySelector('#cmdtyTable tbody').innerHTML = DATA.commodities.map(c => `<tr><td>${c.name}</td><td>${fN(c.price)}</td><td class="${cls(c.ret_5d)}">${fP(c.ret_5d)}</td></tr>`).join('');
+  document.querySelector('#cmdtyTable tbody').innerHTML = DATA.commodities.map(c => {
+    const isYield = (c.name||'').includes('Yield');
+    const isDollar = (c.name||'').includes('Dollar');
+    const priceStr = isYield ? c.price.toFixed(3)+'%' : (isDollar ? c.price.toFixed(3) : `$${c.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`);
+    const pts = c.change_pts != null ? `${c.change_pts>=0?'+':''}${c.change_pts.toFixed(2)}` : '';
+    const pct = c.change_pct != null ? fP(c.change_pct) : 'N/A';
+    return `<tr><td>${c.name}</td><td style="font-weight:600">${priceStr}</td><td class="${cls(c.change_pts)}" style="font-size:12px">${pts}</td><td class="${cls(c.change_pct)}">${pct}</td><td class="${cls(c.ret_5d)}">${fP(c.ret_5d)}</td></tr>`;
+  }).join('');
 
   // Sidebar news
   const allPosts = DATA.reddit.flatMap(s => (s.posts || []).map(p => ({...p, sub: s.subreddit})));

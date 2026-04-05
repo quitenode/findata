@@ -47,7 +47,13 @@ INDICES = [
 ]
 MEGACAPS = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
 SECTORS = ["XLE", "XLF", "XLK", "XLV", "XLI", "XLC", "XLP", "XLRE", "XLU", "XLB"]
-COMMODITIES_ETFS = ["USO", "GLD", "SLV", "TLT", "UUP"]
+COMMODITIES = [
+    ("CL=F",     "WTI Crude"),
+    ("GC=F",     "Gold"),
+    ("SI=F",     "Silver"),
+    ("^TNX",     "10Y Yield"),
+    ("DX-Y.NYB", "US Dollar Index"),
+]
 CRYPTO_COINS = ["bitcoin", "ethereum", "solana"]
 CRYPTO_PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 REDDIT_SUBS = ["wallstreetbets", "stocks", "investing"]
@@ -271,16 +277,22 @@ def generate_report() -> str:
 
     # ---- COMMODITIES ----
     lines.append("\n### Commodities & Safe Havens\n")
-    lines.append("| Ticker | Price | 1d% | 5d% | Signal |")
-    lines.append("|--------|-------|-----|-----|--------|")
+    lines.append("| Asset | Price | Chg | 1d% | 5d% | Signal |")
+    lines.append("|-------|-------|-----|-----|-----|--------|")
 
-    for ticker in COMMODITIES_ETFS:
+    for ticker, name in COMMODITIES:
         q = safe_quote(ticker)
         hist = safe_history(ticker)
         tech = compute_technicals(hist["Close"]) if not hist.empty else {}
         sig = direction_signal(tech)
+        price = q.get("price")
+        prev = q.get("previous_close")
+        pts = round(price - prev, 2) if price and prev else None
+        is_yield = "Yield" in name
+        price_str = f"{price:.3f}%" if is_yield else fmt(price, 2, prefix="$")
         lines.append(
-            f"| {ticker} | {fmt(q.get('price'), prefix='$')} "
+            f"| {name} | {price_str} "
+            f"| {fmt(pts, 2, prefix='+' if pts and pts >= 0 else '')} "
             f"| {fmt(tech.get('ret_1d'), suffix='%')} "
             f"| {fmt(tech.get('ret_5d'), suffix='%')} "
             f"| **{sig}** |"
@@ -487,18 +499,24 @@ def generate_report_cn() -> str:
 
     # ---- 大宗商品 ----
     lines.append("\n### 大宗商品与避险资产\n")
-    lines.append("| 代码 | 价格 | 日涨跌 | 5日涨跌 | 信号 |")
-    lines.append("|------|------|--------|---------|------|")
+    lines.append("| 品种 | 价格 | 涨跌 | 日涨跌% | 5日% | 信号 |")
+    lines.append("|------|------|------|---------|------|------|")
 
-    commodity_names_cn = {"USO": "原油", "GLD": "黄金", "SLV": "白银", "TLT": "长期国债", "UUP": "美元指数"}
-    for ticker in COMMODITIES_ETFS:
+    commodity_names_cn = {"WTI Crude": "WTI原油", "Gold": "黄金", "Silver": "白银", "10Y Yield": "10年期国债收益率", "US Dollar Index": "美元指数"}
+    for ticker, name in COMMODITIES:
         q = safe_quote(ticker)
         hist = safe_history(ticker)
         tech = compute_technicals(hist["Close"]) if not hist.empty else {}
         sig = direction_signal(tech)
-        name_cn = commodity_names_cn.get(ticker, ticker)
+        name_cn = commodity_names_cn.get(name, name)
+        price = q.get("price")
+        prev = q.get("previous_close")
+        pts = round(price - prev, 2) if price and prev else None
+        is_yield = "Yield" in name
+        price_str = f"{price:.3f}%" if is_yield else fmt(price, 2, prefix="$")
         lines.append(
-            f"| {ticker} ({name_cn}) | {fmt(q.get('price'), prefix='$')} "
+            f"| {name_cn} | {price_str} "
+            f"| {fmt(pts, 2, prefix='+' if pts and pts >= 0 else '')} "
             f"| {fmt(tech.get('ret_1d'), suffix='%')} "
             f"| {fmt(tech.get('ret_5d'), suffix='%')} "
             f"| **{translate_signal(sig)}** |"

@@ -135,15 +135,28 @@ def generate_data_json():
     sectors.sort(key=lambda x: x.get("ret_5d") or -999, reverse=True)
     data["sectors"] = sectors
 
+    COMMODITY_MAP = [
+        ("CL=F",     "WTI Crude",       "/bbl"),
+        ("GC=F",     "Gold",            "/oz"),
+        ("SI=F",     "Silver",          "/oz"),
+        ("^TNX",     "10Y Yield",       "%"),
+        ("DX-Y.NYB", "US Dollar Index", ""),
+    ]
     commodities = []
-    for t, name in [("USO", "Oil"), ("GLD", "Gold"), ("SLV", "Silver"), ("TLT", "Bonds"), ("UUP", "Dollar")]:
+    for t, name, unit in COMMODITY_MAP:
         try:
             q = us_stocks.get_quote(t)
             h = us_stocks.get_history(t, period="1mo", interval="1d")
             c = h["Close"]
+            price = q.get("price")
+            prev = q.get("previous_close")
+            change_pts = round(price - prev, 2) if price and prev else None
             ret5 = round((c.iloc[-1] / c.iloc[-6] - 1) * 100, 2) if len(c) >= 6 else None
             commodities.append({
-                "ticker": t, "name": name, "price": q["price"], "ret_5d": ret5,
+                "ticker": t, "name": name, "unit": unit, "price": price,
+                "change_pts": change_pts,
+                "change_pct": round((price / prev - 1) * 100, 2) if price and prev else None,
+                "ret_5d": ret5,
                 "history": c.tolist(),
                 "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index],
             })
