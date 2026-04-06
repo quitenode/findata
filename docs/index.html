@@ -190,6 +190,20 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .sent-item .sent-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
 .sent-bar { height: 8px; border-radius: 4px; position: relative; margin-top: 6px; }
 .sent-bar .sent-marker { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--text); background: var(--surface); position: absolute; top: -2px; transform: translateX(-50%); }
+
+/* Fear & Greed semicircle gauge */
+.fg-gauge { position: relative; width: 200px; height: 110px; margin: 0 auto 8px; }
+.fg-arc { width: 200px; height: 100px; border-radius: 100px 100px 0 0; background: conic-gradient(from 0.75turn at 50% 100%, #ef4444 0deg, #f97316 45deg, #eab308 90deg, #22c55e 135deg, #16a34a 180deg); overflow: hidden; }
+.fg-arc-inner { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 140px; height: 70px; background: var(--surface); border-radius: 70px 70px 0 0; }
+.fg-needle { position: absolute; bottom: 0; left: 50%; width: 3px; height: 80px; background: var(--text); transform-origin: bottom center; border-radius: 2px; }
+.fg-score { text-align: center; font-size: 36px; font-weight: 900; margin-top: -10px; }
+.fg-rating { text-align: center; font-size: 14px; font-weight: 700; margin-top: 2px; }
+.fg-components { margin-top: 12px; }
+.fg-comp { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+.fg-comp .fg-comp-name { flex: 1; color: var(--muted); }
+.fg-comp .fg-comp-bar { width: 60px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.fg-comp .fg-comp-fill { height: 100%; border-radius: 3px; }
+.fg-comp .fg-comp-val { width: 24px; text-align: right; font-weight: 700; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -226,6 +240,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
       <div class="card"><div class="card-title" id="cmdtyTitle">Commodities & Safe Havens</div><table id="cmdtyTable"><thead id="cmdtyThead"><tr><th>Asset</th><th>Price</th><th>Chg</th><th>1d%</th><th>5d%</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="right-col">
+      <div class="card" id="fearGreedCard" style="display:none"><div class="card-title">Fear & Greed Index <a href="https://www.cnn.com/markets/fear-and-greed" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">CNN</a></div><div id="fearGreedPanel"></div></div>
       <div class="card" id="mktSentimentCard"><div class="card-title" id="sentTitle">Market Sentiment</div><div id="mktSentiment"></div></div>
       <div class="card"><div class="card-title" id="sectorTitle">Sector Heatmap <span style="font-size:10px;color:var(--muted);text-transform:none;font-weight:400">(5-day)</span></div><div id="sectorBars"></div></div>
       <div class="card"><div class="card-title"><span class="badge">LIVE</span> <span id="redditTitle">Reddit Buzz</span></div><div id="sideNews"></div></div>
@@ -427,6 +442,7 @@ function normalizeSnapshot(raw) {
     crypto_trending: Array.isArray(o.crypto_trending) ? o.crypto_trending : [],
     crypto_indicators: Array.isArray(o.crypto_indicators) ? o.crypto_indicators : [],
     all_stocks: Array.isArray(o.all_stocks) ? o.all_stocks : [],
+    fear_greed: o.fear_greed && typeof o.fear_greed === 'object' ? o.fear_greed : null,
   };
 }
 
@@ -562,7 +578,44 @@ function renderMarkets() {
   const sorted = Object.entries(allMentions).sort((a,b)=>b[1]-a[1]).slice(0,12);
   document.getElementById('trendTickers').innerHTML = sorted.map(([t,c]) => `<span class="trend-tag">${t} <span style="color:var(--muted);font-weight:400">${c}</span></span>`).join('');
 
+  renderFearGreed();
   renderMarketSentiment();
+}
+
+// -- CNN-style Fear & Greed Index --
+function renderFearGreed() {
+  const card = document.getElementById('fearGreedCard');
+  const el = document.getElementById('fearGreedPanel');
+  const fg = DATA.fear_greed;
+  if (!fg || fg.score == null) { card.style.display = 'none'; return; }
+
+  card.style.display = 'block';
+  const score = fg.score;
+  const rating = fg.rating || '';
+  const needleAngle = -90 + (score / 100) * 180;
+
+  const scoreColor = s => s <= 25 ? 'var(--red)' : (s <= 45 ? 'var(--orange)' : (s <= 55 ? 'var(--yellow)' : (s <= 75 ? 'var(--green)' : '#16a34a')));
+  const compColor = scoreColor;
+
+  const comps = (fg.components || []).map(c => `
+    <div class="fg-comp">
+      <span class="fg-comp-name">${c.name}</span>
+      <div class="fg-comp-bar"><div class="fg-comp-fill" style="width:${c.score}%;background:${compColor(c.score)}"></div></div>
+      <span class="fg-comp-val" style="color:${compColor(c.score)}">${c.score}</span>
+    </div>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="fg-gauge">
+      <div class="fg-arc"></div>
+      <div class="fg-arc-inner"></div>
+      <div class="fg-needle" style="transform:rotate(${needleAngle}deg)"></div>
+    </div>
+    <div class="fg-score" style="color:${scoreColor(score)}">${score}</div>
+    <div class="fg-rating" style="color:${scoreColor(score)}">${rating}</div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:4px"><span>${t('Extreme Fear')}</span><span>${t('Neutral')}</span><span>${t('Extreme Greed')}</span></div>
+    <div class="fg-components">${comps}</div>
+  `;
 }
 
 // -- MARKET SENTIMENT (VIX + Fear & Greed + Market Breadth) --
