@@ -143,37 +143,20 @@ def main():
 
     dashboard_url = "https://quitenode.github.io/findata/#report"
 
-    header = (
-        f"📊 *findata Daily Prediction — {date_str}*\n"
-        f"[View on Dashboard]({dashboard_url})\n\n"
-    )
-
-    # Send English report as text messages
-    if os.path.isfile(en_md):
-        with open(en_md) as f:
-            report = f.read()
-        chunks = chunk_markdown(header + report)
-        for i, chunk in enumerate(chunks):
-            try:
-                send_message(CHAT_ID, chunk)
-                print(f"  Sent EN text chunk {i+1}/{len(chunks)}")
-            except HTTPError as e:
-                body = e.read().decode() if hasattr(e, 'read') else str(e)
-                print(f"  Failed EN chunk {i+1}: {body}", file=sys.stderr)
-                try:
-                    send_message(CHAT_ID, chunk, parse_mode="")
-                    print(f"  Retried EN chunk {i+1} as plain text")
-                except Exception as e2:
-                    print(f"  Retry also failed: {e2}", file=sys.stderr)
-
     # Send PDFs as documents
+    sent = 0
     for pdf_path, lang in [(en_pdf, "EN"), (cn_pdf, "CN")]:
         if os.path.isfile(pdf_path):
             try:
-                send_document(CHAT_ID, pdf_path, caption=f"findata {date_str} ({lang})")
+                caption = f"📊 findata Daily Prediction — {date_str} ({lang})\n{dashboard_url}"
+                send_document(CHAT_ID, pdf_path, caption=caption)
                 print(f"  Sent {lang} PDF")
+                sent += 1
             except Exception as e:
                 print(f"  Failed to send {lang} PDF: {e}", file=sys.stderr)
+
+    if sent == 0:
+        print(f"  Warning: no PDFs found for {date_str}", file=sys.stderr)
 
     print(f"Telegram delivery complete for {date_str}")
 
