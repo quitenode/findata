@@ -614,6 +614,12 @@ function renderFearGreed() {
     <div class="fg-score" style="color:${scoreColor(score)}">${score}</div>
     <div class="fg-rating" style="color:${scoreColor(score)}">${rating}</div>
     <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:4px"><span>${t('Extreme Fear')}</span><span>${t('Neutral')}</span><span>${t('Extreme Greed')}</span></div>
+    ${fg.previous_close != null ? `<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--muted);justify-content:center;flex-wrap:wrap">
+      <span>Prev Close: <strong style="color:var(--text)">${Math.round(fg.previous_close)}</strong></span>
+      ${fg.previous_1_week != null ? `<span>1W Ago: <strong style="color:var(--text)">${Math.round(fg.previous_1_week)}</strong></span>` : ''}
+      ${fg.previous_1_month != null ? `<span>1M Ago: <strong style="color:var(--text)">${Math.round(fg.previous_1_month)}</strong></span>` : ''}
+      ${fg.previous_1_year != null ? `<span>1Y Ago: <strong style="color:var(--text)">${Math.round(fg.previous_1_year)}</strong></span>` : ''}
+    </div>` : ''}
     <div class="fg-components">${comps}</div>
   `;
 }

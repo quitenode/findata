@@ -333,74 +333,55 @@ def generate_data_json():
     sectors.sort(key=lambda x: x.get("ret_5d") or -999, reverse=True)
     data["sectors"] = sectors
 
-    # ---- CNN-style Fear & Greed Index (7 components) ----
+    # ---- CNN Fear & Greed Index (real data from CNN API) ----
     try:
-        fg_components = []
+        import requests as _req
+        _cnn_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Referer": "https://www.cnn.com/markets/fear-and-greed",
+            "Accept": "application/json",
+        }
+        r = _req.get("https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+                      headers=_cnn_headers, timeout=10)
+        r.raise_for_status()
+        cnn = r.json()
+        fg = cnn["fear_and_greed"]
+        score = round(fg["score"])
+        rating = fg["rating"].title()
 
-        # 1. Market Momentum: S&P 500 vs 125-day MA
-        spx_h = us_stocks.get_history("^GSPC", period="1y", interval="1d")
-        spx_c = spx_h["Close"].dropna()
-        sma125 = spx_c.tail(125).mean()
-        momentum = max(0, min(100, round(50 + (spx_c.iloc[-1] / sma125 - 1) * 500)))
-        fg_components.append({"name": "Market Momentum", "desc": "S&P 500 vs 125-day MA", "score": momentum})
-
-        # 2. Stock Price Strength: from all_stocks, % near 52w high vs low
-        near_high = sum(1 for s in all_stocks if s.get("52w_high") and s["price"] and s["price"] >= s["52w_high"] * 0.95)
-        near_low = sum(1 for s in all_stocks if s.get("52w_low") and s["price"] and s["price"] <= s["52w_low"] * 1.05)
-        total_valid = max(1, sum(1 for s in all_stocks if s.get("52w_high") and s.get("52w_low") and s.get("price")))
-        strength = max(0, min(100, round((near_high - near_low) / total_valid * 200 + 50)))
-        fg_components.append({"name": "Stock Price Strength", "desc": "52-week highs vs lows", "score": strength})
-
-        # 3. Stock Price Breadth: % above SMA50
-        above_sma50 = sum(1 for s in all_stocks if s.get("technicals", {}).get("sma50", {}).get("signal") == "bullish")
-        breadth_total = max(1, sum(1 for s in all_stocks if s.get("technicals", {}).get("sma50")))
-        breadth = max(0, min(100, round(above_sma50 / breadth_total * 100)))
-        fg_components.append({"name": "Stock Price Breadth", "desc": "% of stocks above SMA50", "score": breadth})
-
-        # 4. Put/Call Options: estimated from VIX level
-        vix_data = next((i for i in indices if i["ticker"] == "^VIX"), None)
-        vix_val = vix_data["price"] if vix_data else 20
-        putcall_score = max(0, min(100, round(100 - (vix_val - 12) * 4)))
-        fg_components.append({"name": "Put & Call Options", "desc": "Estimated from VIX", "score": putcall_score})
-
-        # 5. Market Volatility: VIX vs 50-day MA
-        vix_h = us_stocks.get_history("^VIX", period="3mo", interval="1d")
-        vix_c = vix_h["Close"].dropna()
-        vix_sma50 = vix_c.tail(50).mean()
-        vol_score = max(0, min(100, round(50 + (vix_sma50 - vix_c.iloc[-1]) / vix_sma50 * 200)))
-        fg_components.append({"name": "Market Volatility", "desc": "VIX vs 50-day MA", "score": vol_score})
-
-        # 6. Safe Haven Demand: SPY vs TLT 20-day returns
-        spy_h = us_stocks.get_history("SPY", period="2mo", interval="1d")["Close"].dropna()
-        tlt_h = us_stocks.get_history("TLT", period="2mo", interval="1d")["Close"].dropna()
-        spy_ret = (spy_h.iloc[-1] / spy_h.iloc[-21] - 1) * 100
-        tlt_ret = (tlt_h.iloc[-1] / tlt_h.iloc[-21] - 1) * 100
-        safe_score = max(0, min(100, round(50 + (spy_ret - tlt_ret) * 10)))
-        fg_components.append({"name": "Safe Haven Demand", "desc": "Stocks vs bonds (20-day)", "score": safe_score})
-
-        # 7. Junk Bond Demand: HYG vs LQD 20-day spread
-        hyg_h = us_stocks.get_history("HYG", period="2mo", interval="1d")["Close"].dropna()
-        lqd_h = us_stocks.get_history("LQD", period="2mo", interval="1d")["Close"].dropna()
-        hyg_ret = (hyg_h.iloc[-1] / hyg_h.iloc[-21] - 1) * 100
-        lqd_ret = (lqd_h.iloc[-1] / lqd_h.iloc[-21] - 1) * 100
-        junk_score = max(0, min(100, round(50 + (hyg_ret - lqd_ret) * 20)))
-        fg_components.append({"name": "Junk Bond Demand", "desc": "High yield vs investment grade", "score": junk_score})
-
-        overall_fg = round(sum(c["score"] for c in fg_components) / len(fg_components))
-        if overall_fg <= 25: rating = "Extreme Fear"
-        elif overall_fg <= 45: rating = "Fear"
-        elif overall_fg <= 55: rating = "Neutral"
-        elif overall_fg <= 75: rating = "Greed"
-        else: rating = "Extreme Greed"
+        # Extract 7 component indicators from the response
+        components = []
+        component_map = {
+            "market_momentum_sp500": "Market Momentum",
+            "stock_price_strength": "Stock Price Strength",
+            "stock_price_breadth": "Stock Price Breadth",
+            "put_call_options": "Put & Call Options",
+            "market_volatility_vix": "Market Volatility",
+            "safe_haven_demand": "Safe Haven Demand",
+            "junk_bond_demand": "Junk Bond Demand",
+        }
+        for key, name in component_map.items():
+            comp = cnn.get(key, {})
+            if isinstance(comp, dict) and "score" in comp:
+                components.append({
+                    "name": name,
+                    "desc": comp.get("rating", "").title(),
+                    "score": round(comp["score"]),
+                })
 
         data["fear_greed"] = {
-            "score": overall_fg,
+            "score": score,
             "rating": rating,
-            "components": fg_components,
+            "previous_close": fg.get("previous_close"),
+            "previous_1_week": fg.get("previous_1_week"),
+            "previous_1_month": fg.get("previous_1_month"),
+            "previous_1_year": fg.get("previous_1_year"),
+            "components": components,
+            "source": "CNN",
         }
-        print(f"  Fear & Greed: {overall_fg} ({rating})")
+        print(f"  Fear & Greed (CNN): {score} ({rating})")
     except Exception as e:
-        print(f"  Warning: Fear & Greed failed: {e}")
+        print(f"  Warning: CNN Fear & Greed failed ({e}), skipping")
 
     COMMODITY_MAP = [
         ("CL=F",     "WTI Crude",       "/bbl"),
