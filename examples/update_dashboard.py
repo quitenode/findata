@@ -457,7 +457,19 @@ def generate_data_json():
             reddit_data.append({"subreddit": sub, "posts": items, "ticker_mentions": mentions})
         except Exception:
             pass
-    data["reddit"] = reddit_data
+    if reddit_data:
+        data["reddit"] = reddit_data
+    else:
+        # Preserve existing reddit data from data.json (Reddit blocks datacenter IPs)
+        try:
+            if os.path.isfile(DATA_JSON_PATH):
+                with open(DATA_JSON_PATH) as _f:
+                    existing = json.load(_f)
+                data["reddit"] = existing.get("reddit", [])
+                if data["reddit"]:
+                    print("  Reddit: kept existing data (live fetch failed)")
+        except Exception:
+            data["reddit"] = []
 
     reports = []
     if os.path.isdir(PRED_DIR):
