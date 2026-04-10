@@ -292,9 +292,12 @@ def generate_data_json():
     import io as _io
     MEGACAP_TICKERS = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
     SEMI_EXTRA = [
-        "TSM", "GFS", "STM", "UMC", "ACLS",  # International / small-cap semis
-        "SOXX", "SMH", "XSD", "PSI",           # Semi ETFs
-        "ARM", "MRVL", "SWKS", "MPWR",         # Fabless extras
+        "TSM", "GFS", "STM", "UMC", "ACLS", "TSEM",  # Foundries / intl
+        "SOXX", "SMH", "XSD", "PSI",                   # Semi ETFs
+        "ARM", "MRVL", "SWKS", "MPWR", "ADI",          # Fabless
+        "COHR", "CRDO", "MTSI", "LSCC", "SMTC",        # Specialty
+        "ENTG", "ONTO", "FORM", "NVMI", "SITM",         # Equipment
+        "ALAB", "AMKR", "ASX",                           # AI / packaging
     ]
 
     all_tickers = set(MEGACAP_TICKERS) | set(SEMI_EXTRA)

@@ -318,36 +318,33 @@ tr:hover { background: rgba(59,130,246,0.04); }
 
 <!-- SEMI PAGE -->
 <div class="page" id="semi">
-  <!-- TradingView Heatmap Widget -->
+  <!-- TradingView Heatmap -->
   <div class="card" style="padding:0;overflow:hidden">
     <div class="card-title" style="padding:14px 16px 0 16px">Semiconductor Sector Heatmap</div>
     <div id="semiHeatmapContainer" style="height:500px"></div>
   </div>
-  <!-- Sub-sector breakdown -->
+  <!-- Sub-sector tiles -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px" id="semiSectors">
-    <div class="card">
-      <div class="card-title">Chip Designers (Fabless)</div>
-      <div id="semiFabless"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Foundries & IDMs</div>
-      <div id="semiFoundry"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Equipment & EDA</div>
-      <div id="semiEquip"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Memory & Storage</div>
-      <div id="semiMemory"></div>
-    </div>
+    <div class="card"><div class="card-title">Chip Designers (Fabless)</div><div id="semiFabless"></div></div>
+    <div class="card"><div class="card-title">Foundries & IDMs</div><div id="semiFoundry"></div></div>
+    <div class="card"><div class="card-title">Equipment & EDA</div><div id="semiEquip"></div></div>
+    <div class="card"><div class="card-title">Memory & Storage</div><div id="semiMemory"></div></div>
+    <div class="card"><div class="card-title">AI Accelerator Supply Chain</div><div id="semiAI"></div></div>
+    <div class="card"><div class="card-title">International Semi</div><div id="semiIntl"></div></div>
   </div>
-  <!-- Key Semi ETFs -->
+  <!-- Semi ETFs -->
   <div class="card" style="margin-top:16px">
-    <div class="card-title">Semiconductor ETFs & Indices</div>
+    <div class="card-title">Semiconductor ETFs</div>
     <table id="semiEtfTable"><thead><tr><th>ETF</th><th>Name</th><th>Price</th><th>Change</th><th>1W</th><th>1M</th><th>YTD</th></tr></thead><tbody></tbody></table>
   </div>
-  <!-- TradingView chart for selected semi stock -->
+  <!-- Full ranking table -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">Top 40 Semiconductor Companies by Market Cap
+      <a href="https://companiesmarketcap.com/semiconductors/largest-semiconductor-companies-by-market-cap/" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">companiesmarketcap.com</a>
+    </div>
+    <table id="semiRankTable" style="font-size:12px"><thead><tr><th style="width:30px">#</th><th>Company</th><th style="text-align:right">Market Cap</th><th style="text-align:right">Price</th><th style="text-align:right">Today</th><th>Country</th></tr></thead><tbody id="semiRankTbody"></tbody></table>
+  </div>
+  <!-- TradingView chart -->
   <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
     <div style="padding:14px 16px 0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span class="card-title" style="margin-bottom:0">Semi Stock Chart</span>
@@ -1502,29 +1499,67 @@ function renderCryptoSummary(indicators) {
 // -- SEMI (Semiconductor Sector) --
 const SEMI_STOCKS = {
   fabless: [
-    {t:'NVDA',n:'NVIDIA'},{t:'AMD',n:'AMD'},{t:'AVGO',n:'Broadcom'},{t:'QCOM',n:'Qualcomm'},
-    {t:'MRVL',n:'Marvell'},{t:'ARM',n:'Arm Holdings'},{t:'NXPI',n:'NXP Semi'},
-    {t:'MCHP',n:'Microchip'},{t:'SWKS',n:'Skyworks'},{t:'MPWR',n:'Monolithic Power'},
+    {t:'NVDA',n:'NVIDIA',mc:'$4.47T'},{t:'AVGO',n:'Broadcom',mc:'$1.68T'},{t:'AMD',n:'AMD',mc:'$386B'},
+    {t:'QCOM',n:'Qualcomm',mc:'$136B'},{t:'ARM',n:'Arm Holdings',mc:'$159B'},{t:'MRVL',n:'Marvell',mc:'$105B'},
+    {t:'ADI',n:'Analog Devices',mc:'$172B'},{t:'NXPI',n:'NXP Semi',mc:'$52B'},{t:'MPWR',n:'Monolithic Power',mc:'$66B'},
+    {t:'MCHP',n:'Microchip',mc:'$39B'},{t:'SWKS',n:'Skyworks',mc:'$8.5B'},{t:'SMTC',n:'Semtech',mc:'$8.2B'},
+    {t:'LSCC',n:'Lattice Semi',mc:'$15B'},{t:'CRDO',n:'Credo Tech',mc:'$20B'},{t:'MTSI',n:'MACOM',mc:'$19B'},
   ],
   foundry: [
-    {t:'TSM',n:'TSMC'},{t:'INTC',n:'Intel'},{t:'TXN',n:'Texas Instruments'},
-    {t:'GFS',n:'GlobalFoundries'},{t:'STM',n:'STMicro'},{t:'ON',n:'onsemi'},
-    {t:'UMC',n:'UMC'},
+    {t:'TSM',n:'TSMC',mc:'$1.90T'},{t:'INTC',n:'Intel',mc:'$310B'},{t:'GFS',n:'GlobalFoundries',mc:'$27B'},
+    {t:'UMC',n:'UMC',mc:'$24B'},{t:'STM',n:'STMicro',mc:'$35B'},{t:'ON',n:'onsemi',mc:'$27B'},
+    {t:'TXN',n:'Texas Instruments',mc:'$196B'},{t:'TSEM',n:'Tower Semi',mc:'$24B'},
   ],
   equip: [
-    {t:'ASML',n:'ASML'},{t:'AMAT',n:'Applied Materials'},{t:'LRCX',n:'Lam Research'},
-    {t:'KLAC',n:'KLA Corp'},{t:'SNPS',n:'Synopsys'},{t:'CDNS',n:'Cadence'},
-    {t:'TER',n:'Teradyne'},{t:'ACLS',n:'Axcelis'},
+    {t:'ASML',n:'ASML',mc:'$569B'},{t:'AMAT',n:'Applied Materials',mc:'$316B'},{t:'LRCX',n:'Lam Research',mc:'$325B'},
+    {t:'KLAC',n:'KLA Corp',mc:'$227B'},{t:'SNPS',n:'Synopsys',mc:'$78B'},{t:'CDNS',n:'Cadence',mc:'$62B'},
+    {t:'TER',n:'Teradyne',mc:'$36B'},{t:'ACLS',n:'Axcelis',mc:'$11B'},{t:'COHR',n:'Coherent',mc:'$53B'},
+    {t:'ENTG',n:'Entegris',mc:'$20B'},{t:'ONTO',n:'Onto Innovation',mc:'$12B'},{t:'FORM',n:'FormFactor',mc:'$9.4B'},
+    {t:'NVMI',n:'Nova Ltd',mc:'$16B'},
   ],
   memory: [
-    {t:'MU',n:'Micron'},{t:'WDC',n:'Western Digital'},{t:'STX',n:'Seagate'},
+    {t:'MU',n:'Micron',mc:'$475B'},{t:'WDC',n:'Western Digital',mc:'$32B'},{t:'STX',n:'Seagate',mc:'$25B'},
+  ],
+  ai_accel: [
+    {t:'NVDA',n:'NVIDIA',mc:'$4.47T'},{t:'AVGO',n:'Broadcom',mc:'$1.68T'},{t:'AMD',n:'AMD',mc:'$386B'},
+    {t:'MRVL',n:'Marvell',mc:'$105B'},{t:'CRDO',n:'Credo Tech',mc:'$20B'},{t:'ALAB',n:'Astera Labs',mc:'$22B'},
+    {t:'COHR',n:'Coherent',mc:'$53B'},
+  ],
+  intl: [
+    {t:'TSM',n:'TSMC',mc:'$1.90T',c:'🇹🇼'},{t:'ASML',n:'ASML',mc:'$569B',c:'🇳🇱'},
+    {t:'ARM',n:'Arm Holdings',mc:'$159B',c:'🇬🇧'},{t:'STM',n:'STMicro',mc:'$35B',c:'🇨🇭'},
+    {t:'UMC',n:'UMC',mc:'$24B',c:'🇹🇼'},{t:'NXPI',n:'NXP Semi',mc:'$52B',c:'🇳🇱'},
+    {t:'NVMI',n:'Nova Ltd',mc:'$16B',c:'🇮🇱'},{t:'TSEM',n:'Tower Semi',mc:'$24B',c:'🇮🇱'},
+    {t:'ASX',n:'ASE Group',mc:'$54B',c:'🇹🇼'},
   ],
 };
 const SEMI_ETFS = [
   {t:'SOXX',n:'iShares Semiconductor'},{t:'SMH',n:'VanEck Semiconductor'},
   {t:'XSD',n:'SPDR S&P Semiconductor'},{t:'PSI',n:'Invesco Dynamic Semi'},
 ];
-const SEMI_ALL = [...SEMI_STOCKS.fabless,...SEMI_STOCKS.foundry,...SEMI_STOCKS.equip,...SEMI_STOCKS.memory];
+const SEMI_RANKING = [
+  {r:1,t:'NVDA',n:'NVIDIA',mc:'$4.47T',c:'🇺🇸'},{r:2,t:'TSM',n:'TSMC',mc:'$1.90T',c:'🇹🇼'},
+  {r:3,t:'AVGO',n:'Broadcom',mc:'$1.68T',c:'🇺🇸'},{r:4,t:'ASML',n:'ASML',mc:'$569B',c:'🇳🇱'},
+  {r:5,t:'MU',n:'Micron',mc:'$475B',c:'🇺🇸'},{r:6,t:'AMD',n:'AMD',mc:'$386B',c:'🇺🇸'},
+  {r:7,t:'LRCX',n:'Lam Research',mc:'$325B',c:'🇺🇸'},{r:8,t:'AMAT',n:'Applied Materials',mc:'$316B',c:'🇺🇸'},
+  {r:9,t:'INTC',n:'Intel',mc:'$310B',c:'🇺🇸'},{r:10,t:'KLAC',n:'KLA Corp',mc:'$227B',c:'🇺🇸'},
+  {r:11,t:'TXN',n:'Texas Instruments',mc:'$196B',c:'🇺🇸'},{r:12,t:'ADI',n:'Analog Devices',mc:'$172B',c:'🇺🇸'},
+  {r:13,t:'ARM',n:'Arm Holdings',mc:'$159B',c:'🇬🇧'},{r:14,t:'QCOM',n:'Qualcomm',mc:'$136B',c:'🇺🇸'},
+  {r:15,t:'MRVL',n:'Marvell',mc:'$105B',c:'🇺🇸'},{r:16,t:'SNPS',n:'Synopsys',mc:'$78B',c:'🇺🇸'},
+  {r:17,t:'MPWR',n:'Monolithic Power',mc:'$66B',c:'🇺🇸'},{r:18,t:'CDNS',n:'Cadence',mc:'$62B',c:'🇺🇸'},
+  {r:19,t:'COHR',n:'Coherent',mc:'$53B',c:'🇺🇸'},{r:20,t:'NXPI',n:'NXP Semi',mc:'$52B',c:'🇳🇱'},
+  {r:21,t:'MCHP',n:'Microchip',mc:'$39B',c:'🇺🇸'},{r:22,t:'STM',n:'STMicro',mc:'$35B',c:'🇨🇭'},
+  {r:23,t:'TER',n:'Teradyne',mc:'$36B',c:'🇺🇸'},{r:24,t:'ON',n:'onsemi',mc:'$27B',c:'🇺🇸'},
+  {r:25,t:'GFS',n:'GlobalFoundries',mc:'$27B',c:'🇺🇸'},{r:26,t:'UMC',n:'UMC',mc:'$24B',c:'🇹🇼'},
+  {r:27,t:'TSEM',n:'Tower Semi',mc:'$24B',c:'🇮🇱'},{r:28,t:'ALAB',n:'Astera Labs',mc:'$22B',c:'🇺🇸'},
+  {r:29,t:'CRDO',n:'Credo Tech',mc:'$20B',c:'🇺🇸'},{r:30,t:'ENTG',n:'Entegris',mc:'$20B',c:'🇺🇸'},
+  {r:31,t:'MTSI',n:'MACOM',mc:'$19B',c:'🇺🇸'},{r:32,t:'NVMI',n:'Nova Ltd',mc:'$16B',c:'🇮🇱'},
+  {r:33,t:'LSCC',n:'Lattice Semi',mc:'$15B',c:'🇺🇸'},{r:34,t:'AMKR',n:'Amkor Tech',mc:'$14B',c:'🇺🇸'},
+  {r:35,t:'ONTO',n:'Onto Innovation',mc:'$12B',c:'🇺🇸'},{r:36,t:'ACLS',n:'Axcelis',mc:'$11B',c:'🇺🇸'},
+  {r:37,t:'SITM',n:'SiTime',mc:'$11B',c:'🇺🇸'},{r:38,t:'FORM',n:'FormFactor',mc:'$9.4B',c:'🇺🇸'},
+  {r:39,t:'SMTC',n:'Semtech',mc:'$8.2B',c:'🇺🇸'},{r:40,t:'SWKS',n:'Skyworks',mc:'$8.5B',c:'🇺🇸'},
+];
+const SEMI_ALL = [...new Set([...SEMI_STOCKS.fabless,...SEMI_STOCKS.foundry,...SEMI_STOCKS.equip,...SEMI_STOCKS.memory,...SEMI_STOCKS.ai_accel].map(s=>s.t))].map(t=>({t}));
 let semiChartTicker = 'NVDA';
 
 function renderSemi() {
@@ -1555,6 +1590,8 @@ function renderSemi() {
   renderSectorGrid('semiFoundry', SEMI_STOCKS.foundry);
   renderSectorGrid('semiEquip', SEMI_STOCKS.equip);
   renderSectorGrid('semiMemory', SEMI_STOCKS.memory);
+  renderSectorGrid('semiAI', SEMI_STOCKS.ai_accel);
+  renderSectorGrid('semiIntl', SEMI_STOCKS.intl);
 
   // ETF table
   const etfTbody = document.querySelector('#semiEtfTable tbody');
@@ -1574,8 +1611,26 @@ function renderSemi() {
     }).join('');
   }
 
+  // Ranking table
+  const rankTbody = document.getElementById('semiRankTbody');
+  if (rankTbody) {
+    rankTbody.innerHTML = SEMI_RANKING.map(a => {
+      const d = lookup[a.t];
+      const price = d ? fN(d.price) : '—';
+      const chg = d && d.change_pct != null ? d.change_pct : null;
+      return `<tr style="cursor:pointer" onclick="loadSemiChart('${a.t}')">
+        <td style="color:var(--muted);font-weight:600">${a.r}</td>
+        <td><strong>${a.n}</strong> <span style="color:var(--muted);font-size:11px">${a.t}</span></td>
+        <td style="text-align:right;font-weight:600">${a.mc}</td>
+        <td style="text-align:right">${price}</td>
+        <td style="text-align:right" class="${chg!=null?(chg>=0?'up':'down'):''}">${chg!=null?fP(chg):'—'}</td>
+        <td style="font-size:11px">${a.c||''}</td>
+      </tr>`;
+    }).join('');
+  }
+
   // Quick-pick chips
-  const chips = ['NVDA','AMD','TSM','ASML','AVGO','INTC','MU','QCOM','ARM','SOXX','SMH'];
+  const chips = ['NVDA','AMD','TSM','ASML','AVGO','INTC','MU','QCOM','ARM','MRVL','LRCX','SOXX','SMH'];
   document.getElementById('semiChipPicks').innerHTML = chips.map(t =>
     `<div class="quick-chip${t===semiChartTicker?' active':''}" data-st="${t}" onclick="loadSemiChart('${t}')">${t}</div>`
   ).join('');
