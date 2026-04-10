@@ -139,6 +139,75 @@ def _compute_technicals(closes, highs, lows, volumes):
     return indicators
 
 
+def _scrape_finviz_screener(view, index_filter="idx_sp500"):
+    """Scrape one Finviz screener view (paginated, 20 per page)."""
+    import re, time as _t
+    _hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    all_rows = []
+    for start in range(1, 600, 20):
+        try:
+            r = requests.get(f"https://finviz.com/screener.ashx?v={view}&f={index_filter}&r={start}", headers=_hdrs, timeout=15)
+            rows = re.findall(r'<tr[^>]*class="styled-row[^"]*"[^>]*>(.*?)</tr>', r.text, re.DOTALL)
+            if not rows:
+                break
+            for row in rows:
+                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+                all_rows.append([re.sub(r'<[^>]+>', '', c).strip() for c in cells])
+            _t.sleep(0.15)
+        except Exception:
+            break
+    return all_rows
+
+
+def _fetch_finviz_bulk():
+    """Fetch Finviz data for all S&P 500 stocks using bulk screener views."""
+    result = {}
+
+    # v=121: valuation (P/E, Forward P/E, PEG, P/S, P/B, EPS growth)
+    # Cols: No, Ticker, MCap, P/E, FwdP/E, PEG, P/S, P/B, P/C, P/FCF, EPSThisY, EPSNextY, EPSPast5Y, EPSNext5Y, SalesPast5Y, Price, Change, Volume
+    v121 = _scrape_finviz_screener(121)
+    for row in v121:
+        if len(row) >= 16:
+            t = row[1]
+            result[t] = {
+                "P/E": row[3], "Forward P/E": row[4], "PEG": row[5],
+                "P/S": row[6], "P/B": row[7],
+                "EPS this Y": row[10], "EPS next Y": row[11],
+                "EPS past 5Y": row[12], "EPS next 5Y": row[13],
+            }
+
+    # v=131: ownership (insider, institutional, short)
+    # Cols: No, Ticker, MCap, Outstanding, Float, InsiderOwn, InsiderTrans, InstOwn, InstTrans, ShortFloat, ShortRatio, AvgVol, Price, Change, Volume
+    v131 = _scrape_finviz_screener(131)
+    for row in v131:
+        if len(row) >= 12:
+            t = row[1]
+            if t not in result:
+                result[t] = {}
+            result[t].update({
+                "Insider Own": row[5], "Insider Trans": row[6],
+                "Inst Own": row[7], "Inst Trans": row[8],
+                "Short Float": row[9], "Short Ratio": row[10],
+            })
+
+    # v=141: performance
+    # Cols: No, Ticker, PerfWeek, PerfMonth, PerfQuart, PerfHalf, PerfYTD, PerfYear, Perf3Y, Perf5Y, Perf10Y, VolW, VolM, AvgVol, RelVol, Price, Change, Volume
+    v141 = _scrape_finviz_screener(141)
+    for row in v141:
+        if len(row) >= 16:
+            t = row[1]
+            if t not in result:
+                result[t] = {}
+            result[t].update({
+                "Perf Week": row[2], "Perf Month": row[3],
+                "Perf Quarter": row[4], "Perf Half Y": row[5],
+                "Perf YTD": row[6], "Perf Year": row[7],
+                "Volatility": row[11],
+            })
+
+    return result
+
+
 def _fetch_finviz(ticker):
     """Fetch Seeking Alpha-equivalent data from Finviz (free, no API key)."""
     import re
@@ -222,8 +291,13 @@ def generate_data_json():
     # ---- All stocks: S&P 500 + Nasdaq 100 (batch fetch) ----
     import io as _io
     MEGACAP_TICKERS = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
+    SEMI_EXTRA = [
+        "TSM", "GFS", "STM", "UMC", "ACLS",  # International / small-cap semis
+        "SOXX", "SMH", "XSD", "PSI",           # Semi ETFs
+        "ARM", "MRVL", "SWKS", "MPWR",         # Fabless extras
+    ]
 
-    all_tickers = set(MEGACAP_TICKERS)
+    all_tickers = set(MEGACAP_TICKERS) | set(SEMI_EXTRA)
     try:
         import requests as _req
         _hdrs = {"User-Agent": "Mozilla/5.0"}
@@ -318,31 +392,41 @@ def generate_data_json():
 
             all_stocks.append(entry)
 
-            if t in MEGACAP_TICKERS:
-                mega_entry = dict(entry)
-                try:
-                    news_items = us_stocks.get_news(t)
-                    mega_entry["news"] = news_items[:8]
-                except Exception:
-                    mega_entry["news"] = []
-                try:
-                    ar = us_stocks.get_analyst_ratings(t)
-                    mega_entry["analyst"] = {
-                        "target_mean": ar.get("target_mean"),
-                        "target_high": ar.get("target_high"),
-                        "target_low": ar.get("target_low"),
-                        "recommendation": ar.get("recommendation"),
-                        "num_analysts": ar.get("num_analysts"),
-                    }
-                except Exception:
-                    pass
-                try:
-                    mega_entry["finviz"] = _fetch_finviz(t)
-                except Exception:
-                    pass
-                megacaps.append(mega_entry)
         except Exception:
             pass
+
+    # Fetch Finviz data for all stocks via bulk screener (fast: ~30s for 500+)
+    print(f"  Fetching Finviz bulk data for all stocks...")
+    finviz_bulk = _fetch_finviz_bulk()
+    _fv_count = 0
+    for entry in all_stocks:
+        fv = finviz_bulk.get(entry["ticker"])
+        if fv:
+            entry["finviz"] = fv
+            _fv_count += 1
+    print(f"  Finviz: {_fv_count}/{len(all_stocks)} matched")
+
+    for entry in all_stocks:
+        t = entry["ticker"]
+        if t in MEGACAP_TICKERS:
+            mega_entry = dict(entry)
+            try:
+                news_items = us_stocks.get_news(t)
+                mega_entry["news"] = news_items[:8]
+            except Exception:
+                mega_entry["news"] = []
+            try:
+                ar = us_stocks.get_analyst_ratings(t)
+                mega_entry["analyst"] = {
+                    "target_mean": ar.get("target_mean"),
+                    "target_high": ar.get("target_high"),
+                    "target_low": ar.get("target_low"),
+                    "recommendation": ar.get("recommendation"),
+                    "num_analysts": ar.get("num_analysts"),
+                }
+            except Exception:
+                pass
+            megacaps.append(mega_entry)
 
     megacaps.sort(key=lambda x: x.get("market_cap") or 0, reverse=True)
     data["megacaps"] = megacaps
