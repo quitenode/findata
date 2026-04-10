@@ -1494,9 +1494,10 @@ const SEMI_ALL = [...SEMI_STOCKS.fabless,...SEMI_STOCKS.foundry,...SEMI_STOCKS.e
 let semiChartTicker = 'NVDA';
 
 function renderSemi() {
-  // Render sub-sector grids from data.json
+  // Build lookup from both all_stocks and megacaps
   const lookup = {};
   (DATA.all_stocks || []).forEach(s => { lookup[s.ticker] = s; });
+  (DATA.megacaps || []).forEach(s => { if (!lookup[s.ticker]) lookup[s.ticker] = s; });
 
   function renderSectorGrid(containerId, stocks) {
     const el = document.getElementById(containerId);
