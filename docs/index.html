@@ -267,6 +267,8 @@ tr:hover { background: rgba(59,130,246,0.04); }
   </div>
   <!-- Quote info -->
   <div id="stockInfoPanel" class="card" style="display:none;margin-top:16px"></div>
+  <!-- Finviz / SA-equivalent data -->
+  <div id="stockFinvizPanel" class="card" style="display:none;margin-top:16px"></div>
   <!-- Technical indicators -->
   <div id="stockTechPanel" class="card" style="display:none;margin-top:16px"></div>
   <!-- News -->
@@ -769,6 +771,7 @@ function loadStockChart(ticker) {
     renderCachedQuote(cached);
     renderCachedTechnicals(cached);
     renderCachedNews(cached);
+    renderFinvizPanel(cached);
   } else {
     fetchStockQuote(ticker);
     fetchStockTechnicals(ticker);
@@ -894,6 +897,68 @@ function renderCachedTechnicals(s) {
       <div class="tech-item"><div class="tech-label">Volume vs Avg</div><div class="tech-row"><span class="tech-val">${tech.volume_ratio?.value!=null?tech.volume_ratio.value+'x':'—'}</span><span class="tech-signal ${sigCls(tech.volume_ratio?.signal)}">${sigLabel('volume_ratio',tech.volume_ratio?.signal)}</span></div></div>
       <div class="tech-item"><div class="tech-label">3-Month High</div><div class="tech-row"><span class="tech-val">$${f2(tech.high_3m?.value)}</span><span class="tech-signal ${last>=tech.high_3m?.value*0.98?'bullish':'neutral'}">${last>=tech.high_3m?.value*0.98?'Near High':tech.high_3m?.value?((1-last/tech.high_3m.value)*100).toFixed(1)+'% off':'—'}</span></div></div>
       <div class="tech-item"><div class="tech-label">3-Month Low</div><div class="tech-row"><span class="tech-val">$${f2(tech.low_3m?.value)}</span><span class="tech-signal ${last<=tech.low_3m?.value*1.02?'bearish':'neutral'}">${last<=tech.low_3m?.value*1.02?'Near Low':tech.low_3m?.value?((last/tech.low_3m.value-1)*100).toFixed(1)+'% above':'—'}</span></div></div>
+    </div>
+  `;
+}
+
+function renderFinvizPanel(s) {
+  const panel = document.getElementById('stockFinvizPanel');
+  const fv = s.finviz;
+  if (!fv || !Object.keys(fv).length) { panel.style.display = 'none'; return; }
+
+  const recom = parseFloat(fv['Recom']);
+  const recomLabel = recom <= 1.5 ? 'Strong Buy' : (recom <= 2.5 ? 'Buy' : (recom <= 3.5 ? 'Hold' : (recom <= 4.5 ? 'Sell' : 'Strong Sell')));
+  const recomCls = recom <= 2.5 ? 'up' : (recom > 3.5 ? 'down' : '');
+
+  const sections = [
+    { title: t('Analyst'), items: [
+      ['Recommendation', `<span class="${recomCls}" style="font-weight:700">${recomLabel}</span> (${fv['Recom'] || '—'})`],
+      ['Target Price', fv['Target Price'] ? `$${fv['Target Price']}` : '—'],
+      ['Earnings', fv['Earnings'] || '—'],
+    ]},
+    { title: 'Valuation', items: [
+      ['P/E', fv['P/E'] || '—'], ['Forward P/E', fv['Forward P/E'] || '—'],
+      ['PEG', fv['PEG'] || '—'], ['P/S', fv['P/S'] || '—'], ['P/B', fv['P/B'] || '—'],
+    ]},
+    { title: 'Growth', items: [
+      ['EPS (TTM)', fv['EPS (ttm)'] || '—'], ['EPS Next Y', fv['EPS next Y'] || '—'],
+      ['EPS Next 5Y', fv['EPS next 5Y'] || '—'], ['EPS Q/Q', fv['EPS Q/Q'] || '—'],
+    ]},
+    { title: 'Ownership', items: [
+      ['Insider Own', fv['Insider Own'] || '—'], ['Insider Trans', fv['Insider Trans'] || '—'],
+      ['Inst Own', fv['Inst Own'] || '—'], ['Inst Trans', fv['Inst Trans'] || '—'],
+      ['Short Float', fv['Short Float'] || '—'], ['Short Ratio', fv['Short Ratio'] || '—'],
+    ]},
+    { title: 'Performance', items: [
+      ['Week', fv['Perf Week'] || '—'], ['Month', fv['Perf Month'] || '—'],
+      ['Quarter', fv['Perf Quarter'] || '—'], ['Half Year', fv['Perf Half Y'] || '—'],
+      ['Year', fv['Perf Year'] || '—'], ['YTD', fv['Perf YTD'] || '—'],
+    ]},
+    { title: 'Risk', items: [
+      ['Beta', fv['Beta'] || '—'], ['Volatility', fv['Volatility'] || '—'],
+      ['52W High', fv['52W High'] || '—'], ['52W Low', fv['52W Low'] || '—'],
+      ['SMA20', fv['SMA20'] || '—'], ['SMA50', fv['SMA50'] || '—'], ['SMA200', fv['SMA200'] || '—'],
+    ]},
+  ];
+  if (fv['Dividend']) {
+    sections[0].items.push(['Dividend', `${fv['Dividend']} (${fv['Dividend %'] || ''})`]);
+  }
+
+  const perfColor = v => {
+    if (!v || v === '—') return '';
+    return v.startsWith('-') ? 'color:var(--red)' : 'color:var(--green)';
+  };
+
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="card-title">Fundamental Data <span style="font-size:10px;font-weight:400;text-transform:none;color:var(--muted)">via Finviz</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+      ${sections.map(sec => `
+        <div style="background:var(--surface2);border-radius:6px;padding:10px 14px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">${sec.title}</div>
+          ${sec.items.map(([label, val]) => `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px"><span style="color:var(--muted)">${label}</span><span style="font-weight:600;${perfColor(val)}">${val}</span></div>`).join('')}
+        </div>
+      `).join('')}
     </div>
   `;
 }

@@ -139,6 +139,35 @@ def _compute_technicals(closes, highs, lows, volumes):
     return indicators
 
 
+def _fetch_finviz(ticker):
+    """Fetch Seeking Alpha-equivalent data from Finviz (free, no API key)."""
+    import re
+    _hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    r = requests.get(f"https://finviz.com/quote.ashx?t={ticker}", headers=_hdrs, timeout=10)
+    html = r.text
+    metrics = {}
+    rows = re.findall(r'<tr class="table-dark-row">(.*?)</tr>', html, re.DOTALL)
+    for row in rows:
+        cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+        for i in range(0, len(cells) - 1, 2):
+            label = re.sub(r'<[^>]+>', '', cells[i]).strip()
+            val = re.sub(r'<[^>]+>', '', cells[i + 1]).strip()
+            if label:
+                metrics[label] = val
+
+    KEYS = [
+        "Recom", "Target Price", "P/E", "Forward P/E", "PEG", "P/S", "P/B",
+        "EPS (ttm)", "EPS next Y", "EPS next 5Y", "EPS Q/Q",
+        "Insider Own", "Insider Trans", "Inst Own", "Inst Trans",
+        "Short Float", "Short Ratio", "Beta",
+        "SMA20", "SMA50", "SMA200", "RSI (14)", "Volatility",
+        "52W High", "52W Low",
+        "Perf Week", "Perf Month", "Perf Quarter", "Perf Half Y", "Perf Year", "Perf YTD",
+        "Earnings", "Dividend", "Dividend %",
+    ]
+    return {k: metrics[k] for k in KEYS if k in metrics}
+
+
 def generate_data_json():
     data = {
         "generated": datetime.now(PT).strftime("%Y-%m-%d %H:%M %Z"),
@@ -305,6 +334,10 @@ def generate_data_json():
                         "recommendation": ar.get("recommendation"),
                         "num_analysts": ar.get("num_analysts"),
                     }
+                except Exception:
+                    pass
+                try:
+                    mega_entry["finviz"] = _fetch_finviz(t)
                 except Exception:
                     pass
                 megacaps.append(mega_entry)
