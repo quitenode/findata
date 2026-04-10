@@ -213,6 +213,14 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .semi-tile .st-price { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .semi-tile .st-change { font-size: 12px; font-weight: 700; margin-top: 2px; }
 @media (max-width: 800px) { #semiSectors { grid-template-columns: 1fr; } }
+
+/* Ranking page */
+.rank-type { display: inline-block; font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.rank-type.stock { background: rgba(59,130,246,0.15); color: var(--accent); }
+.rank-type.commodity { background: rgba(234,179,8,0.15); color: var(--yellow); }
+.rank-type.crypto { background: rgba(249,115,22,0.15); color: var(--orange); }
+.rank-type.etf { background: rgba(100,116,139,0.15); color: var(--muted); }
+#rankingTable tr { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -227,6 +235,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="nlink" data-page="stocks">Stocks</div>
   <div class="nlink" data-page="crypto">Crypto</div>
   <div class="nlink" data-page="semi">Semi</div>
+  <div class="nlink" data-page="ranking">Ranking</div>
   <div class="nlink" data-page="sentiment">Sentiment</div>
   <div class="nlink" data-page="report">Report</div>
   <div class="spacer"></div>
@@ -348,6 +357,30 @@ tr:hover { background: rgba(59,130,246,0.04); }
   </div>
 </div>
 
+<!-- RANKING PAGE -->
+<div class="page" id="ranking">
+  <!-- Global Heatmap -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="card-title" style="padding:14px 16px 0 16px">Global Market Heatmap
+      <a href="https://companiesmarketcap.com/assets-by-market-cap/" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--accent)">companiesmarketcap.com</a>
+    </div>
+    <div id="rankingHeatmap" style="height:500px"></div>
+  </div>
+  <!-- Category filter -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:16px;margin-bottom:12px" id="rankingFilters"></div>
+  <!-- Top Assets Table -->
+  <div class="card" style="margin-top:0">
+    <div class="card-title" id="rankingTitle">Top 100 Assets by Market Cap</div>
+    <table id="rankingTable" style="font-size:12px">
+      <thead><tr>
+        <th style="width:40px">#</th><th>Asset</th><th>Type</th><th style="text-align:right">Market Cap</th>
+        <th style="text-align:right">Price</th><th style="text-align:right">Today</th><th>Country</th>
+      </tr></thead>
+      <tbody id="rankingTbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- SENTIMENT PAGE -->
 <div class="page" id="sentiment">
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px" id="redditPanels"></div>
@@ -377,6 +410,7 @@ const I18N = {
   'Crypto': {en:'Crypto', cn:'加密货币'},
   'Sentiment': {en:'Sentiment', cn:'舆情'},
   'Semi': {en:'Semi', cn:'半导体'},
+  'Ranking': {en:'Ranking', cn:'排行榜'},
   'Report': {en:'Report', cn:'报告'},
   // Markets page
   'S&P 500 — 30 Day': {en:'S&P 500 — 30 Day', cn:'标普500 — 30天'},
@@ -449,7 +483,7 @@ function t(key) { return (I18N[key] && I18N[key][LANG]) || key; }
 function applyLanguage() {
   document.querySelectorAll('.nlink').forEach(n => {
     const page = n.dataset.page;
-    const map = {markets:'Markets', stocks:'Stocks', crypto:'Crypto', semi:'Semi', sentiment:'Sentiment', report:'Report'};
+    const map = {markets:'Markets', stocks:'Stocks', crypto:'Crypto', semi:'Semi', ranking:'Ranking', sentiment:'Sentiment', report:'Report'};
     if (map[page]) n.textContent = t(map[page]);
   });
   document.querySelectorAll('[data-gl]').forEach(b => b.classList.toggle('active', b.dataset.gl === LANG));
@@ -1625,6 +1659,120 @@ function loadSemiChart(ticker) {
   widgetDiv.appendChild(script);
 }
 
+// -- RANKING (Top Assets by Market Cap) --
+const TOP_ASSETS = [
+  {r:1,n:'Gold',t:'GC=F',mc:'$33.3T',p:'$4,783',chg:-0.73,type:'commodity',country:''},
+  {r:2,n:'NVIDIA',t:'NVDA',mc:'$4.47T',p:'$183.91',chg:1.01,type:'stock',country:'🇺🇸'},
+  {r:3,n:'Silver',t:'SI=F',mc:'$4.27T',p:'$75.83',chg:-0.80,type:'commodity',country:''},
+  {r:4,n:'Apple',t:'AAPL',mc:'$3.83T',p:'$260.49',chg:0.61,type:'stock',country:'🇺🇸'},
+  {r:5,n:'Alphabet',t:'GOOGL',mc:'$3.83T',p:'$316.37',chg:0.52,type:'stock',country:'🇺🇸'},
+  {r:6,n:'Microsoft',t:'MSFT',mc:'$2.77T',p:'$373.07',chg:-0.34,type:'stock',country:'🇺🇸'},
+  {r:7,n:'Amazon',t:'AMZN',mc:'$2.51T',p:'$233.65',chg:5.60,type:'stock',country:'🇺🇸'},
+  {r:8,n:'TSMC',t:'TSM',mc:'$1.90T',p:'$365.49',chg:-0.11,type:'stock',country:'🇹🇼'},
+  {r:9,n:'Saudi Aramco',t:'2222.SR',mc:'$1.75T',p:'$7.25',chg:0.82,type:'stock',country:'🇸🇦'},
+  {r:10,n:'Broadcom',t:'AVGO',mc:'$1.68T',p:'$354.91',chg:1.22,type:'stock',country:'🇺🇸'},
+  {r:11,n:'Meta',t:'META',mc:'$1.59T',p:'$628.39',chg:2.61,type:'stock',country:'🇺🇸'},
+  {r:12,n:'Bitcoin',t:'BTC',mc:'$1.44T',p:'$72,101',chg:1.57,type:'crypto',country:''},
+  {r:13,n:'Tesla',t:'TSLA',mc:'$1.30T',p:'$345.62',chg:0.69,type:'stock',country:'🇺🇸'},
+  {r:14,n:'Berkshire Hathaway',t:'BRK-B',mc:'$1.05T',p:'$485.20',chg:1.14,type:'stock',country:'🇺🇸'},
+  {r:15,n:'Walmart',t:'WMT',mc:'$1.03T',p:'$129.13',chg:1.47,type:'stock',country:'🇺🇸'},
+  {r:16,n:'Samsung',t:'005930.KS',mc:'$918B',p:'$139.15',chg:0.98,type:'stock',country:'🇰🇷'},
+  {r:17,n:'Eli Lilly',t:'LLY',mc:'$855B',p:'$955.19',chg:0.20,type:'stock',country:'🇺🇸'},
+  {r:18,n:'VOO (S&P 500 ETF)',t:'VOO',mc:'$855B',p:'$625.02',chg:0.59,type:'etf',country:''},
+  {r:19,n:'JPMorgan Chase',t:'JPM',mc:'$837B',p:'$310.33',chg:0.77,type:'stock',country:'🇺🇸'},
+  {r:20,n:'IVV (S&P 500 ETF)',t:'IVV',mc:'$748B',p:'$683.01',chg:0.59,type:'etf',country:''},
+  {r:21,n:'SPY (S&P 500 ETF)',t:'SPY',mc:'$680B',p:'$679.91',chg:0.58,type:'etf',country:''},
+  {r:22,n:'Exxon Mobil',t:'XOM',mc:'$644B',p:'$155.04',chg:-0.76,type:'stock',country:'🇺🇸'},
+  {r:23,n:'Visa',t:'V',mc:'$594B',p:'$308.29',chg:-0.22,type:'stock',country:'🇺🇸'},
+  {r:24,n:'Tencent',t:'TCEHY',mc:'$588B',p:'$64.90',chg:3.84,type:'stock',country:'🇨🇳'},
+  {r:25,n:'Johnson & Johnson',t:'JNJ',mc:'$582B',p:'$241.31',chg:0.00,type:'stock',country:'🇺🇸'},
+  {r:26,n:'ASML',t:'ASML',mc:'$569B',p:'$1,449',chg:1.94,type:'stock',country:'🇳🇱'},
+  {r:27,n:'Platinum',t:'PL=F',mc:'$520B',p:'$2,081',chg:-1.49,type:'commodity',country:''},
+  {r:28,n:'SK Hynix',t:'000660.KS',mc:'$492B',p:'$695.08',chg:3.10,type:'stock',country:'🇰🇷'},
+  {r:29,n:'Micron',t:'MU',mc:'$475B',p:'$421.51',chg:3.63,type:'stock',country:'🇺🇸'},
+  {r:30,n:'Costco',t:'COST',mc:'$458B',p:'$1,032',chg:0.17,type:'stock',country:'🇺🇸'},
+  {r:31,n:'Mastercard',t:'MA',mc:'$449B',p:'$503.57',chg:-0.53,type:'stock',country:'🇺🇸'},
+  {r:32,n:'Netflix',t:'NFLX',mc:'$433B',p:'$102.05',chg:2.68,type:'stock',country:'🇺🇸'},
+  {r:33,n:'Oracle',t:'ORCL',mc:'$396B',p:'$137.86',chg:-3.70,type:'stock',country:'🇺🇸'},
+  {r:34,n:'QQQ (Nasdaq ETF)',t:'QQQ',mc:'$392B',p:'$610.19',chg:0.68,type:'etf',country:''},
+  {r:35,n:'AMD',t:'AMD',mc:'$386B',p:'$236.64',chg:2.08,type:'stock',country:'🇺🇸'},
+  {r:36,n:'Chevron',t:'CVX',mc:'$379B',p:'$190.36',chg:-1.31,type:'stock',country:'🇺🇸'},
+  {r:37,n:'Bank of America',t:'BAC',mc:'$378B',p:'$52.71',chg:1.60,type:'stock',country:'🇺🇸'},
+  {r:38,n:'AbbVie',t:'ABBV',mc:'$376B',p:'$212.40',chg:0.38,type:'stock',country:'🇺🇸'},
+  {r:39,n:'Caterpillar',t:'CAT',mc:'$368B',p:'$787.07',chg:2.01,type:'stock',country:'🇺🇸'},
+  {r:40,n:'Procter & Gamble',t:'PG',mc:'$343B',p:'$146.66',chg:1.21,type:'stock',country:'🇺🇸'},
+  {r:41,n:'Home Depot',t:'HD',mc:'$338B',p:'$339.58',chg:1.02,type:'stock',country:'🇺🇸'},
+  {r:42,n:'Coca-Cola',t:'KO',mc:'$336B',p:'$78.18',chg:1.15,type:'stock',country:'🇺🇸'},
+  {r:43,n:'GE Aerospace',t:'GE',mc:'$330B',p:'$313.02',chg:1.61,type:'stock',country:'🇺🇸'},
+  {r:44,n:'Cisco',t:'CSCO',mc:'$329B',p:'$83.17',chg:-0.63,type:'stock',country:'🇺🇸'},
+  {r:45,n:'Lam Research',t:'LRCX',mc:'$325B',p:'$258.76',chg:4.98,type:'stock',country:'🇺🇸'},
+  {r:46,n:'Applied Materials',t:'AMAT',mc:'$316B',p:'$397.81',chg:3.13,type:'stock',country:'🇺🇸'},
+  {r:47,n:'Palantir',t:'PLTR',mc:'$312B',p:'$130.49',chg:-7.30,type:'stock',country:'🇺🇸'},
+  {r:48,n:'Intel',t:'INTC',mc:'$310B',p:'$61.72',chg:4.70,type:'stock',country:'🇺🇸'},
+  {r:49,n:'Alibaba',t:'BABA',mc:'$305B',p:'$127.68',chg:1.88,type:'stock',country:'🇨🇳'},
+  {r:50,n:'Ethereum',t:'ETH',mc:'$265B',p:'$2,196',chg:0.54,type:'crypto',country:''},
+];
+
+let rankFilter = 'all';
+
+function renderRanking() {
+  // Heatmap widget
+  const hmContainer = document.getElementById('rankingHeatmap');
+  if (hmContainer && !hmContainer.dataset.loaded) {
+    hmContainer.dataset.loaded = '1';
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container';
+    widgetDiv.style.height = '100%';
+    widgetDiv.innerHTML = '<div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>';
+    hmContainer.appendChild(widgetDiv);
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js';
+    script.async = true;
+    script.textContent = JSON.stringify({
+      exchanges: [], dataSource: 'AllUSA', grouping: 'sector', blockSize: 'market_cap_basic',
+      blockColor: 'change', locale: LANG==='cn'?'zh_CN':'en', symbolUrl: '',
+      colorTheme: 'dark', hasTopBar: true, isDataSetEnabled: true, isZoomEnabled: true,
+      hasSymbolTooltip: true, width: '100%', height: '100%', isTransparent: true,
+    });
+    widgetDiv.appendChild(script);
+  }
+
+  // Category filters
+  const types = [{id:'all',label:'All'},{id:'stock',label:'Stocks'},{id:'commodity',label:'Commodities'},{id:'crypto',label:'Crypto'},{id:'etf',label:'ETFs'}];
+  document.getElementById('rankingFilters').innerHTML = types.map(t =>
+    `<div class="quick-chip${rankFilter===t.id?' active':''}" onclick="rankFilter='${t.id}';renderRankingTable()">${t.label}</div>`
+  ).join('');
+
+  renderRankingTable();
+}
+
+function renderRankingTable() {
+  const filtered = rankFilter === 'all' ? TOP_ASSETS : TOP_ASSETS.filter(a => a.type === rankFilter);
+
+  // Update with live data from data.json where available
+  const lookup = {};
+  (DATA.all_stocks || []).forEach(s => { lookup[s.ticker] = s; });
+  (DATA.megacaps || []).forEach(s => { lookup[s.ticker] = s; });
+
+  document.getElementById('rankingTbody').innerHTML = filtered.map((a, i) => {
+    const live = lookup[a.t];
+    const price = live ? fN(live.price) : a.p;
+    const chg = live && live.change_pct != null ? live.change_pct : a.chg;
+    const chgCls = chg >= 0 ? 'up' : 'down';
+    const typeCls = a.type;
+
+    return `<tr onclick="navigateTo('stocks','${a.t}')">
+      <td style="color:var(--muted);font-weight:600">${a.r}</td>
+      <td><strong>${a.n}</strong> <span style="color:var(--muted);font-size:11px">${a.t}</span></td>
+      <td><span class="rank-type ${typeCls}">${a.type.toUpperCase()}</span></td>
+      <td style="text-align:right;font-weight:600">${a.mc}</td>
+      <td style="text-align:right">${price}</td>
+      <td style="text-align:right" class="${chgCls}">${fP(chg)}</td>
+      <td style="font-size:11px">${a.country}</td>
+    </tr>`;
+  }).join('');
+}
+
 // -- SENTIMENT --
 function renderSentiment() {
   if (!DATA.reddit.length) {
@@ -1658,7 +1806,7 @@ async function loadReport() {
 }
 
 // NAV — hash-based routing: #stocks/NVDA loads the chart for NVDA
-const VALID_PAGES = ['markets','stocks','crypto','semi','sentiment','report'];
+const VALID_PAGES = ['markets','stocks','crypto','semi','ranking','sentiment','report'];
 
 function parseHash() {
   const h = location.hash.replace('#','');
@@ -1696,6 +1844,7 @@ document.querySelectorAll('.lang-btn[data-gl]').forEach(b => b.addEventListener(
   try { renderStocks(); } catch(e) {}
   try { renderCrypto(); } catch(e) {}
   try { renderSemi(); } catch(e) {}
+  try { renderRanking(); } catch(e) {}
   try { renderSentiment(); } catch(e) {}
   try { renderReport(); } catch(e) {}
 }));
@@ -1712,6 +1861,7 @@ fetch('data.json', { cache: 'no-store' }).then(r => {
   try { renderStocks(); } catch (e) { console.error(e); }
   try { renderCrypto(); } catch (e) { console.error(e); }
   try { renderSemi(); } catch (e) { console.error(e); }
+  try { renderRanking(); } catch (e) { console.error(e); }
   try { renderSentiment(); } catch (e) { console.error(e); }
   try { renderReport(); } catch (e) { console.error(e); }
   applyLanguage();
