@@ -204,6 +204,15 @@ tr:hover { background: rgba(59,130,246,0.04); }
 .fg-comp .fg-comp-bar { width: 60px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .fg-comp .fg-comp-fill { height: 100%; border-radius: 3px; }
 .fg-comp .fg-comp-val { width: 24px; text-align: right; font-weight: 700; font-size: 11px; }
+
+/* Semi page */
+.semi-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.semi-tile { background: var(--surface2); border-radius: 6px; padding: 8px 10px; min-width: 90px; cursor: pointer; text-align: center; border: 1px solid transparent; transition: border-color 0.15s; }
+.semi-tile:hover { border-color: var(--accent); }
+.semi-tile .st-ticker { font-size: 13px; font-weight: 800; }
+.semi-tile .st-price { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.semi-tile .st-change { font-size: 12px; font-weight: 700; margin-top: 2px; }
+@media (max-width: 800px) { #semiSectors { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -217,6 +226,7 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="nlink active" data-page="markets">Markets</div>
   <div class="nlink" data-page="stocks">Stocks</div>
   <div class="nlink" data-page="crypto">Crypto</div>
+  <div class="nlink" data-page="semi">Semi</div>
   <div class="nlink" data-page="sentiment">Sentiment</div>
   <div class="nlink" data-page="report">Report</div>
   <div class="spacer"></div>
@@ -297,6 +307,47 @@ tr:hover { background: rgba(59,130,246,0.04); }
   <div class="card" style="margin-top:16px"><div class="card-title">Trending Coins</div><div id="trendCoins"></div></div>
 </div>
 
+<!-- SEMI PAGE -->
+<div class="page" id="semi">
+  <!-- TradingView Heatmap Widget -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="card-title" style="padding:14px 16px 0 16px">Semiconductor Sector Heatmap</div>
+    <div id="semiHeatmapContainer" style="height:500px"></div>
+  </div>
+  <!-- Sub-sector breakdown -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px" id="semiSectors">
+    <div class="card">
+      <div class="card-title">Chip Designers (Fabless)</div>
+      <div id="semiFabless"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Foundries & IDMs</div>
+      <div id="semiFoundry"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Equipment & EDA</div>
+      <div id="semiEquip"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Memory & Storage</div>
+      <div id="semiMemory"></div>
+    </div>
+  </div>
+  <!-- Key Semi ETFs -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">Semiconductor ETFs & Indices</div>
+    <table id="semiEtfTable"><thead><tr><th>ETF</th><th>Name</th><th>Price</th><th>Change</th><th>1W</th><th>1M</th><th>YTD</th></tr></thead><tbody></tbody></table>
+  </div>
+  <!-- TradingView chart for selected semi stock -->
+  <div class="card" style="margin-top:16px;padding:0;overflow:hidden">
+    <div style="padding:14px 16px 0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="card-title" style="margin-bottom:0">Semi Stock Chart</span>
+      <div id="semiChipPicks" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <div id="semiTvChart" style="height:480px"></div>
+  </div>
+</div>
+
 <!-- SENTIMENT PAGE -->
 <div class="page" id="sentiment">
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px" id="redditPanels"></div>
@@ -325,6 +376,7 @@ const I18N = {
   'Stocks': {en:'Stocks', cn:'股票'},
   'Crypto': {en:'Crypto', cn:'加密货币'},
   'Sentiment': {en:'Sentiment', cn:'舆情'},
+  'Semi': {en:'Semi', cn:'半导体'},
   'Report': {en:'Report', cn:'报告'},
   // Markets page
   'S&P 500 — 30 Day': {en:'S&P 500 — 30 Day', cn:'标普500 — 30天'},
@@ -397,7 +449,7 @@ function t(key) { return (I18N[key] && I18N[key][LANG]) || key; }
 function applyLanguage() {
   document.querySelectorAll('.nlink').forEach(n => {
     const page = n.dataset.page;
-    const map = {markets:'Markets', stocks:'Stocks', crypto:'Crypto', sentiment:'Sentiment', report:'Report'};
+    const map = {markets:'Markets', stocks:'Stocks', crypto:'Crypto', semi:'Semi', sentiment:'Sentiment', report:'Report'};
     if (map[page]) n.textContent = t(map[page]);
   });
   document.querySelectorAll('[data-gl]').forEach(b => b.classList.toggle('active', b.dataset.gl === LANG));
@@ -1413,6 +1465,165 @@ function renderCryptoSummary(indicators) {
   `;
 }
 
+// -- SEMI (Semiconductor Sector) --
+const SEMI_STOCKS = {
+  fabless: [
+    {t:'NVDA',n:'NVIDIA'},{t:'AMD',n:'AMD'},{t:'AVGO',n:'Broadcom'},{t:'QCOM',n:'Qualcomm'},
+    {t:'MRVL',n:'Marvell'},{t:'ARM',n:'Arm Holdings'},{t:'NXPI',n:'NXP Semi'},
+    {t:'MCHP',n:'Microchip'},{t:'SWKS',n:'Skyworks'},{t:'MPWR',n:'Monolithic Power'},
+  ],
+  foundry: [
+    {t:'TSM',n:'TSMC'},{t:'INTC',n:'Intel'},{t:'TXN',n:'Texas Instruments'},
+    {t:'GFS',n:'GlobalFoundries'},{t:'STM',n:'STMicro'},{t:'ON',n:'onsemi'},
+    {t:'UMC',n:'UMC'},
+  ],
+  equip: [
+    {t:'ASML',n:'ASML'},{t:'AMAT',n:'Applied Materials'},{t:'LRCX',n:'Lam Research'},
+    {t:'KLAC',n:'KLA Corp'},{t:'SNPS',n:'Synopsys'},{t:'CDNS',n:'Cadence'},
+    {t:'TER',n:'Teradyne'},{t:'ACLS',n:'Axcelis'},
+  ],
+  memory: [
+    {t:'MU',n:'Micron'},{t:'WDC',n:'Western Digital'},{t:'STX',n:'Seagate'},
+  ],
+};
+const SEMI_ETFS = [
+  {t:'SOXX',n:'iShares Semiconductor'},{t:'SMH',n:'VanEck Semiconductor'},
+  {t:'XSD',n:'SPDR S&P Semiconductor'},{t:'PSI',n:'Invesco Dynamic Semi'},
+];
+const SEMI_ALL = [...SEMI_STOCKS.fabless,...SEMI_STOCKS.foundry,...SEMI_STOCKS.equip,...SEMI_STOCKS.memory];
+let semiChartTicker = 'NVDA';
+
+function renderSemi() {
+  // Render sub-sector grids from data.json
+  const lookup = {};
+  (DATA.all_stocks || []).forEach(s => { lookup[s.ticker] = s; });
+
+  function renderSectorGrid(containerId, stocks) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = `<div class="semi-grid">${stocks.map(s => {
+      const d = lookup[s.t];
+      const price = d ? fN(d.price) : '—';
+      const chg = d && d.change_pct != null ? d.change_pct : null;
+      const chgStr = chg != null ? fP(chg) : '—';
+      const c = chg != null ? (chg >= 0 ? 'up' : 'down') : '';
+      const bg = chg != null ? (chg >= 2 ? 'rgba(34,197,94,0.15)' : (chg >= 0 ? 'rgba(34,197,94,0.07)' : (chg <= -2 ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.07)'))) : '';
+      return `<div class="semi-tile" style="background:${bg}" onclick="loadSemiChart('${s.t}')">
+        <div class="st-ticker">${s.t}</div>
+        <div class="st-price">${price}</div>
+        <div class="st-change ${c}">${chgStr}</div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  renderSectorGrid('semiFabless', SEMI_STOCKS.fabless);
+  renderSectorGrid('semiFoundry', SEMI_STOCKS.foundry);
+  renderSectorGrid('semiEquip', SEMI_STOCKS.equip);
+  renderSectorGrid('semiMemory', SEMI_STOCKS.memory);
+
+  // ETF table
+  const etfTbody = document.querySelector('#semiEtfTable tbody');
+  if (etfTbody) {
+    etfTbody.innerHTML = SEMI_ETFS.map(e => {
+      const d = lookup[e.t];
+      const fv = d?.finviz || {};
+      const chg = d?.change_pct;
+      return `<tr style="cursor:pointer" onclick="loadSemiChart('${e.t}')">
+        <td><strong>${e.t}</strong></td><td>${e.n}</td>
+        <td>${d ? fN(d.price) : '—'}</td>
+        <td class="${chg!=null?(chg>=0?'up':'down'):''}">${chg!=null?fP(chg):'—'}</td>
+        <td class="${(fv['Perf Week']||'').startsWith('-')?'down':'up'}">${fv['Perf Week']||'—'}</td>
+        <td class="${(fv['Perf Month']||'').startsWith('-')?'down':'up'}">${fv['Perf Month']||'—'}</td>
+        <td class="${(fv['Perf YTD']||'').startsWith('-')?'down':'up'}">${fv['Perf YTD']||'—'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Quick-pick chips
+  const chips = ['NVDA','AMD','TSM','ASML','AVGO','INTC','MU','QCOM','ARM','SOXX','SMH'];
+  document.getElementById('semiChipPicks').innerHTML = chips.map(t =>
+    `<div class="quick-chip${t===semiChartTicker?' active':''}" data-st="${t}" onclick="loadSemiChart('${t}')">${t}</div>`
+  ).join('');
+
+  // TradingView heatmap widget
+  renderSemiHeatmap();
+
+  // Default chart
+  loadSemiChart(semiChartTicker);
+}
+
+function renderSemiHeatmap() {
+  const container = document.getElementById('semiHeatmapContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  const widgetDiv = document.createElement('div');
+  widgetDiv.className = 'tradingview-widget-container';
+  widgetDiv.style.height = '100%';
+  widgetDiv.innerHTML = '<div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>';
+  container.appendChild(widgetDiv);
+
+  const script = document.createElement('script');
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js';
+  script.async = true;
+  script.textContent = JSON.stringify({
+    exchanges: [],
+    dataSource: 'SPX500',
+    grouping: 'sector',
+    blockSize: 'market_cap_basic',
+    blockColor: 'change',
+    locale: LANG === 'cn' ? 'zh_CN' : 'en',
+    symbolUrl: '',
+    colorTheme: 'dark',
+    hasTopBar: true,
+    isDataSetEnabled: true,
+    isZoomEnabled: true,
+    hasSymbolTooltip: true,
+    width: '100%',
+    height: '100%',
+    isTransparent: true,
+  });
+  widgetDiv.appendChild(script);
+}
+
+function loadSemiChart(ticker) {
+  semiChartTicker = ticker;
+  document.querySelectorAll('#semiChipPicks .quick-chip').forEach(c => c.classList.toggle('active', c.dataset.st === ticker));
+
+  const container = document.getElementById('semiTvChart');
+  container.innerHTML = '';
+  const widgetDiv = document.createElement('div');
+  widgetDiv.className = 'tradingview-widget-container';
+  widgetDiv.style.height = '100%';
+  widgetDiv.innerHTML = '<div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>';
+  container.appendChild(widgetDiv);
+
+  const script = document.createElement('script');
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.async = true;
+  script.textContent = JSON.stringify({
+    symbol: ticker,
+    width: '100%',
+    height: '100%',
+    autosize: true,
+    interval: 'D',
+    timezone: 'America/Los_Angeles',
+    theme: 'dark',
+    style: '1',
+    locale: LANG === 'cn' ? 'zh_CN' : 'en',
+    backgroundColor: '#111827',
+    gridColor: '#1e293b',
+    hide_top_toolbar: false,
+    hide_legend: false,
+    allow_symbol_change: true,
+    save_image: false,
+    calendar: false,
+    hide_volume: false,
+    studies: ['STD;SMA'],
+    support_host: 'https://www.tradingview.com',
+  });
+  widgetDiv.appendChild(script);
+}
+
 // -- SENTIMENT --
 function renderSentiment() {
   if (!DATA.reddit.length) {
@@ -1446,7 +1657,7 @@ async function loadReport() {
 }
 
 // NAV — hash-based routing: #stocks/NVDA loads the chart for NVDA
-const VALID_PAGES = ['markets','stocks','crypto','sentiment','report'];
+const VALID_PAGES = ['markets','stocks','crypto','semi','sentiment','report'];
 
 function parseHash() {
   const h = location.hash.replace('#','');
@@ -1483,6 +1694,7 @@ document.querySelectorAll('.lang-btn[data-gl]').forEach(b => b.addEventListener(
   try { renderMarkets(); } catch(e) {}
   try { renderStocks(); } catch(e) {}
   try { renderCrypto(); } catch(e) {}
+  try { renderSemi(); } catch(e) {}
   try { renderSentiment(); } catch(e) {}
   try { renderReport(); } catch(e) {}
 }));
@@ -1498,6 +1710,7 @@ fetch('data.json', { cache: 'no-store' }).then(r => {
   try { renderMarkets(); } catch (e) { console.error(e); }
   try { renderStocks(); } catch (e) { console.error(e); }
   try { renderCrypto(); } catch (e) { console.error(e); }
+  try { renderSemi(); } catch (e) { console.error(e); }
   try { renderSentiment(); } catch (e) { console.error(e); }
   try { renderReport(); } catch (e) { console.error(e); }
   applyLanguage();
