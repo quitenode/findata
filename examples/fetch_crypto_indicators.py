@@ -21,6 +21,11 @@ def fetch_all():
     btc_price = None
     btc_mcap = None
 
+    rsi = None
+    puell = None
+    ahr999 = None
+    btc_dom = None
+
     def add(name, value, link="", signal=""):
         indicators.append({"name": name, "value": str(value), "link": link, "signal": signal})
 

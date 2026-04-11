@@ -287,6 +287,8 @@ def generate_report() -> str:
         sig = direction_signal(tech)
         price = q.get("price")
         prev = q.get("previous_close")
+        if not price:
+            continue
         pts = round(price - prev, 2) if price and prev else None
         is_yield = "Yield" in name
         price_str = f"{price:.3f}%" if is_yield else fmt(price, 2, prefix="$")
@@ -511,6 +513,8 @@ def generate_report_cn() -> str:
         name_cn = commodity_names_cn.get(name, name)
         price = q.get("price")
         prev = q.get("previous_close")
+        if not price:
+            continue
         pts = round(price - prev, 2) if price and prev else None
         is_yield = "Yield" in name
         price_str = f"{price:.3f}%" if is_yield else fmt(price, 2, prefix="$")
