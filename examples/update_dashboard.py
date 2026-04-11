@@ -433,6 +433,24 @@ def generate_data_json():
 
     megacaps.sort(key=lambda x: x.get("market_cap") or 0, reverse=True)
     data["megacaps"] = megacaps
+
+    # Never shrink all_stocks — if this run fetched fewer than existing, preserve old data
+    if len(all_stocks) < 100 and os.path.isfile(DATA_JSON_PATH):
+        try:
+            with open(DATA_JSON_PATH) as _ef:
+                existing_data = json.load(_ef)
+            existing_stocks = existing_data.get("all_stocks", [])
+            if len(existing_stocks) > len(all_stocks):
+                print(f"  WARNING: only {len(all_stocks)} stocks fetched (existing has {len(existing_stocks)}), keeping existing")
+                # Merge: update existing entries with fresh data, keep the rest
+                fresh_map = {s["ticker"]: s for s in all_stocks}
+                for s in existing_stocks:
+                    if s["ticker"] in fresh_map:
+                        s.update(fresh_map[s["ticker"]])
+                all_stocks = existing_stocks
+        except Exception:
+            pass
+
     data["all_stocks"] = all_stocks
     print(f"  Stocks: {len(all_stocks)} total, {len(megacaps)} mega-caps with news")
 
