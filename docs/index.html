@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>findata Markets</title>
+<script>
+// Phones get the reading-optimized view; its "Desktop site" link sets findata_desktop for the session.
+if (matchMedia('(max-width: 640px)').matches && !sessionStorage.getItem('findata_desktop')) location.replace('m.html' + location.hash);
+</script>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
