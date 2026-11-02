@@ -17,7 +17,6 @@ Usage:
 
 import sys
 import os
-import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -25,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pandas as pd
 from findata import us_stocks, crypto, reddit_sentiment as reddit
+from update_dashboard import REDDIT_MAX_AGE, load_fresh_reddit
 
 PT = ZoneInfo("America/Los_Angeles")
 
@@ -35,6 +35,10 @@ SIGNAL_CN = {
     "Bullish": "看涨", "Bearish": "看跌",
     "Lean Bullish": "偏多", "Lean Bearish": "偏空",
     "Neutral": "中性", "N/A": "N/A",
+}
+THEME_CN = {
+    "oil": "石油/能源", "war/geopolitics": "战争/地缘政治", "Fed/rates": "美联储/利率",
+    "AI/tech": "AI/科技", "earnings": "财报季", "recession": "经济衰退", "crypto rally": "加密货币上涨",
 }
 WEEKDAY_CN = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 
@@ -59,53 +63,48 @@ CRYPTO_PAIRS = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
 REDDIT_SUBS = ["wallstreetbets", "stocks", "investing"]
 
 
-def _load_cached_reddit():
-    """Load reddit data from docs/data.json as fallback when live fetch fails (CI datacenter IPs)."""
-    try:
-        path = os.path.join(DOCS_DIR, "data.json")
-        with open(path) as f:
-            data = json.load(f)
-        return data.get("reddit") or []
-    except Exception:
-        return []
+_REDDIT = None
 
 
-def _reddit_posts_from_cache(subreddit: str) -> pd.DataFrame:
-    """Build a posts DataFrame from cached data.json reddit entry."""
-    cached = _load_cached_reddit()
-    for sub in cached:
-        if sub.get("subreddit") == subreddit:
-            rows = []
-            for p in sub.get("posts") or []:
-                rows.append({
-                    "title": p.get("title", ""),
-                    "score": p.get("score", 0),
-                    "num_comments": p.get("comments", 0),
-                    "flair": p.get("flair", ""),
-                    "url": p.get("url", ""),
-                    "subreddit": subreddit,
-                })
-            return pd.DataFrame(rows) if rows else pd.DataFrame()
-    return pd.DataFrame()
+def _snapshot_posts(max_age: timedelta) -> pd.DataFrame:
+    """Posts from the docs/data.json snapshot written by update_dashboard.py, if younger than max_age."""
+    cached, _ = load_fresh_reddit(os.path.join(DOCS_DIR, "data.json"), max_age)
+    rows = [
+        {"title": p.get("title", ""), "score": p.get("score"), "num_comments": p.get("comments"),
+         "flair": p.get("flair", ""), "url": p.get("url", ""), "subreddit": sub.get("subreddit")}
+        for sub in cached for p in sub.get("posts") or []
+    ]
+    return pd.DataFrame(rows)
 
 
-def _reddit_mentions_from_cache(subreddit: str) -> pd.DataFrame:
-    cached = _load_cached_reddit()
-    for sub in cached:
-        if sub.get("subreddit") == subreddit:
-            rows = [{"ticker": m["ticker"], "mentions": m["count"]}
-                    for m in (sub.get("ticker_mentions") or [])]
-            return pd.DataFrame(rows) if rows else pd.DataFrame()
-    return pd.DataFrame()
+def reddit_posts() -> pd.DataFrame:
+    """Recent posts for REDDIT_SUBS, fetched once per run and shared by both reports.
+
+    In CI, update_dashboard.py fetches Reddit minutes earlier, and Reddit's feed
+    allows only ~1 anonymous request per minute, so a just-written snapshot wins.
+    Otherwise fetch live, then fall back to a snapshot up to 48h old. Anything
+    older is dropped rather than reported as current discussion.
+    """
+    global _REDDIT
+    if _REDDIT is None:
+        _REDDIT = _snapshot_posts(timedelta(hours=2))
+        if _REDDIT.empty:
+            _REDDIT = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=20)
+        if _REDDIT.empty:
+            _REDDIT = _snapshot_posts(REDDIT_MAX_AGE)
+    return _REDDIT
 
 
-def get_reddit_posts(subreddit: str, limit: int = 20):
-    """Fetch Reddit posts live, falling back to cached data.json on failure."""
-    try:
-        return reddit.get_hot_posts(subreddit, limit=limit)
-    except Exception:
-        cached = _reddit_posts_from_cache(subreddit)
-        return cached if not cached.empty else pd.DataFrame()
+def get_reddit_posts(subreddit: str) -> pd.DataFrame:
+    df = reddit_posts()
+    return df[df["subreddit"] == subreddit] if not df.empty else df
+
+
+def post_line(row, unit: str) -> str:
+    """One markdown bullet for a post; RSS-sourced posts have no score."""
+    flair = f" `{row['flair']}`" if pd.notna(row.get("flair")) and row.get("flair") else ""
+    score = f"[{int(row['score']):>5} {unit}] " if pd.notna(row.get("score")) else ""
+    return f"- {score}{row['title'][:80]}{flair}"
 
 
 def safe_quote(ticker):
@@ -336,19 +335,15 @@ def generate_report() -> str:
     lines.append("\n## Reddit Sentiment\n")
 
     for sub in REDDIT_SUBS:
-        posts = get_reddit_posts(sub, limit=20)
+        posts = get_reddit_posts(sub)
         if posts.empty:
             lines.append(f"\n### r/{sub}\n\n- (no data available)")
             continue
         lines.append(f"\n### r/{sub} -- Top Posts\n")
         for _, row in posts.head(5).iterrows():
-            flair = f" `{row['flair']}`" if row.get("flair") else ""
-            lines.append(f"- [{row['score']:>5} pts] {row['title'][:80]}{flair}")
+            lines.append(post_line(row, "pts"))
 
-        try:
-            tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
-        except Exception:
-            tickers = _reddit_mentions_from_cache(sub)
+        tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
         if not tickers.empty:
             mentions = ", ".join(f"**{r['ticker']}**({r['mentions']})" for _, r in tickers.head(10).iterrows())
             lines.append(f"\nTicker mentions: {mentions}")
@@ -380,33 +375,12 @@ def generate_report() -> str:
 
     lines.append("\n### Key Factors\n")
 
-    # Auto-detect themes from Reddit (with fallback)
-    try:
-        all_posts = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=15)
-    except Exception:
-        all_posts = pd.DataFrame()
+    all_posts = reddit_posts()
     if all_posts.empty:
-        frames = [get_reddit_posts(s, 15) for s in REDDIT_SUBS]
-        all_posts = pd.concat([f for f in frames if not f.empty], ignore_index=True) if any(not f.empty for f in frames) else pd.DataFrame()
-    top_titles = " ".join(all_posts["title"].tolist()) if not all_posts.empty else ""
-
-    themes = []
-    theme_keywords = {
-        "oil": ["oil", "crude", "energy", "OPEC"],
-        "war/geopolitics": ["war", "Iran", "Iraq", "conflict", "sanctions", "missile"],
-        "Fed/rates": ["Fed", "rate", "interest", "FOMC", "Powell", "inflation", "CPI"],
-        "AI/tech": ["AI", "artificial intelligence", "GPU", "chip", "NVIDIA", "semiconductor"],
-        "earnings": ["earnings", "revenue", "EPS", "beat", "miss", "guidance"],
-        "recession": ["recession", "crash", "bear", "correction", "downturn"],
-        "crypto rally": ["bitcoin rally", "crypto surge", "BTC pump", "bull run"],
-    }
-    for theme, keywords in theme_keywords.items():
-        if any(kw.lower() in top_titles.lower() for kw in keywords):
-            themes.append(theme)
-
-    if themes:
-        for t in themes:
-            lines.append(f"- **{t}** is a dominant theme in current Reddit discussion")
+        lines.append("- Reddit data unavailable today")
+    elif themes := reddit.detect_themes(all_posts["title"].tolist()):
+        for t, n in themes:
+            lines.append(f"- **{t}** is a dominant theme in current Reddit discussion ({n} of {len(all_posts)} posts)")
     else:
         lines.append("- No dominant macro theme detected in Reddit sentiment")
 
@@ -562,20 +536,16 @@ def generate_report_cn() -> str:
     lines.append("\n## Reddit 舆情\n")
     sub_names_cn = {"wallstreetbets": "华尔街赌场", "stocks": "股票", "investing": "投资"}
     for sub in REDDIT_SUBS:
-        posts = get_reddit_posts(sub, limit=20)
+        posts = get_reddit_posts(sub)
         name_cn = sub_names_cn.get(sub, sub)
         if posts.empty:
             lines.append(f"\n### r/{sub} ({name_cn})\n\n- (无数据)")
             continue
         lines.append(f"\n### r/{sub} ({name_cn}) -- 热门帖子\n")
         for _, row in posts.head(5).iterrows():
-            flair = f" `{row['flair']}`" if row.get("flair") else ""
-            lines.append(f"- [{row['score']:>5} 分] {row['title'][:80]}{flair}")
+            lines.append(post_line(row, "分"))
 
-        try:
-            tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
-        except Exception:
-            tickers = _reddit_mentions_from_cache(sub)
+        tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
         if not tickers.empty:
             mentions = ", ".join(f"**{r['ticker']}**({r['mentions']})" for _, r in tickers.head(10).iterrows())
             lines.append(f"\n提及股票: {mentions}")
@@ -607,32 +577,12 @@ def generate_report_cn() -> str:
 
     lines.append("\n### 关键因素\n")
 
-    try:
-        all_posts = reddit.scan_multiple_subreddits(REDDIT_SUBS, limit_per_sub=15)
-    except Exception:
-        all_posts = pd.DataFrame()
+    all_posts = reddit_posts()
     if all_posts.empty:
-        frames = [get_reddit_posts(s, 15) for s in REDDIT_SUBS]
-        all_posts = pd.concat([f for f in frames if not f.empty], ignore_index=True) if any(not f.empty for f in frames) else pd.DataFrame()
-    top_titles = " ".join(all_posts["title"].tolist()) if not all_posts.empty else ""
-
-    theme_keywords_cn = {
-        "石油/能源": ["oil", "crude", "energy", "OPEC"],
-        "战争/地缘政治": ["war", "Iran", "Iraq", "conflict", "sanctions", "missile"],
-        "美联储/利率": ["Fed", "rate", "interest", "FOMC", "Powell", "inflation", "CPI"],
-        "AI/科技": ["AI", "artificial intelligence", "GPU", "chip", "NVIDIA", "semiconductor"],
-        "财报季": ["earnings", "revenue", "EPS", "beat", "miss", "guidance"],
-        "经济衰退": ["recession", "crash", "bear", "correction", "downturn"],
-        "加密货币上涨": ["bitcoin rally", "crypto surge", "BTC pump", "bull run"],
-    }
-    themes = []
-    for theme, keywords in theme_keywords_cn.items():
-        if any(kw.lower() in top_titles.lower() for kw in keywords):
-            themes.append(theme)
-
-    if themes:
-        for t in themes:
-            lines.append(f"- **{t}** 是当前Reddit讨论的主要话题")
+        lines.append("- 今日暂无 Reddit 数据")
+    elif themes := reddit.detect_themes(all_posts["title"].tolist()):
+        for t, n in themes:
+            lines.append(f"- **{THEME_CN.get(t, t)}** 是当前Reddit讨论的主要话题 ({n}/{len(all_posts)} 帖)")
     else:
         lines.append("- Reddit舆情中未检测到明显的宏观主题")
 

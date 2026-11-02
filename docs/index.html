@@ -660,7 +660,7 @@ function renderMarkets() {
   // Sidebar news
   const allPosts = DATA.reddit.flatMap(s => (s.posts || []).map(p => ({...p, sub: s.subreddit})));
   allPosts.sort((a,b) => b.score - a.score);
-  document.getElementById('sideNews').innerHTML = allPosts.slice(0,8).map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>200?'up':''}">${p.score}</span>${p.title.slice(0,75)}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">r/${p.sub} · ${p.comments} comments</div></div>`).join('');
+  document.getElementById('sideNews').innerHTML = allPosts.slice(0,8).map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>200?'up':''}">${p.score ?? ''}</span>${p.title.slice(0,75)}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">r/${p.sub}${p.comments != null ? ` · ${p.comments} comments` : ''}</div></div>`).join('');
 
   // Trending tickers
   const allMentions = {};
@@ -1840,7 +1840,7 @@ function renderSentiment() {
     return;
   }
   document.getElementById('redditPanels').innerHTML = DATA.reddit.map(sub => {
-    const posts = (sub.posts || []).map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>100?'up':''}">${p.score}</span>${p.title}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">${p.comments} comments</div></div>`).join('');
+    const posts = (sub.posts || []).map(p => `<div class="news-item"><div class="news-title"><span class="news-score ${p.score>100?'up':''}">${p.score ?? ''}</span>${p.title}${p.flair?`<span class="news-flair">${p.flair}</span>`:''}</div><div class="news-meta">${p.comments != null ? `${p.comments} comments` : ''}</div></div>`).join('');
     const mentions = (sub.ticker_mentions && sub.ticker_mentions.length) ? `<div style="margin-top:8px" class="trend-row">${sub.ticker_mentions.map(t=>`<span class="trend-tag">${t.ticker} <span style="color:var(--muted)">${t.count}</span></span>`).join('')}</div>` : '';
     return `<div class="card"><div class="card-title">r/${sub.subreddit}</div>${posts}${mentions}</div>`;
   }).join('');

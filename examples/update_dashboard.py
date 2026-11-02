@@ -6,8 +6,10 @@ import os
 import json
 import math
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -21,6 +23,23 @@ import pandas as pd
 from findata import us_stocks, crypto, reddit_sentiment as reddit
 
 DATA_JSON_PATH = os.path.join(DOCS_DIR, "data.json")
+
+# A failed Reddit fetch keeps the previous snapshot, but only this long; older
+# posts would be presented on the dashboard and in reports as current discussion.
+REDDIT_MAX_AGE = timedelta(hours=48)
+
+
+def load_fresh_reddit(path=DATA_JSON_PATH, max_age=REDDIT_MAX_AGE):
+    """Return (reddit, fetched_iso) from an existing data.json if fetched within max_age, else ([], None)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            existing = json.load(f)
+        fetched = existing.get("reddit_fetched")
+        if fetched and datetime.now(timezone.utc) - datetime.fromisoformat(fetched) <= max_age:
+            return existing.get("reddit") or [], fetched
+    except (OSError, ValueError, TypeError):
+        pass
+    return [], None
 
 
 def sanitize_for_json(obj):
@@ -374,6 +393,7 @@ def generate_data_json():
             if q["price"] and q.get("previous_close"):
                 chg_pct = round((q["price"] / q["previous_close"] - 1) * 100, 2)
 
+            close = h["Close"].dropna()[-22:]  # keep dates aligned with the non-NaN closes
             entry = {
                 "ticker": t, "name": q.get("name", ""), "price": q["price"],
                 "change_pct": chg_pct,
@@ -382,8 +402,8 @@ def generate_data_json():
                 "dividend_yield": q.get("dividend_yield"),
                 "52w_high": q.get("52w_high"), "52w_low": q.get("52w_low"),
                 "sector": q.get("sector"), "industry": q.get("industry"),
-                "history": h["Close"].dropna().tolist()[-22:],
-                "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in h.index][-22:],
+                "history": close.tolist(),
+                "dates": [str(d.date()) if hasattr(d, "date") else str(d)[:10] for d in close.index],
             }
 
             closes = h["Close"].dropna().tolist()
@@ -566,6 +586,11 @@ def generate_data_json():
             pass
     data["crypto"] = cryptos
 
+    try:
+        data["crypto_trending"] = crypto.get_trending()[:10]
+    except Exception as e:
+        print(f"  Warning: CoinGecko trending failed ({e})")
+
     # Crypto on-chain indicators — computed from free APIs
     try:
         sys.path.insert(0, os.path.dirname(__file__))
@@ -580,34 +605,32 @@ def generate_data_json():
     except Exception as e:
         print(f"  Warning: failed to compute crypto indicators: {e}")
 
+    # One combined request: Reddit's RSS fallback allows ~1 request/minute
+    subs = ["wallstreetbets", "stocks", "investing"]
+    all_posts = reddit.scan_multiple_subreddits(subs, limit_per_sub=10)
+    count = lambda v: int(v) if pd.notna(v) else None  # None when posts came from the RSS fallback
     reddit_data = []
-    for sub in ["wallstreetbets", "stocks", "investing"]:
-        try:
-            posts = reddit.get_hot_posts(sub, limit=10)
-            items = [
-                {"title": r["title"][:100], "score": int(r["score"]),
-                 "comments": int(r["num_comments"]), "flair": r.get("flair", ""),
-                 "url": r.get("url", "")}
-                for _, r in posts.head(7).iterrows()
-            ]
-            tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
-            mentions = [{"ticker": r["ticker"], "count": int(r["mentions"])} for _, r in tickers.head(10).iterrows()]
-            reddit_data.append({"subreddit": sub, "posts": items, "ticker_mentions": mentions})
-        except Exception:
-            pass
+    for sub in subs:
+        posts = all_posts[all_posts["subreddit"] == sub] if not all_posts.empty else all_posts
+        if posts.empty:
+            continue
+        items = [
+            {"title": r["title"][:100], "score": count(r["score"]),
+             "comments": count(r["num_comments"]),
+             "flair": r["flair"] if pd.notna(r.get("flair")) else "",
+             "url": r.get("url", "")}
+            for _, r in posts.head(7).iterrows()
+        ]
+        tickers = reddit.extract_ticker_mentions(posts, min_mentions=1)
+        mentions = [{"ticker": r["ticker"], "count": int(r["mentions"])} for _, r in tickers.head(10).iterrows()]
+        reddit_data.append({"subreddit": sub, "posts": items, "ticker_mentions": mentions})
     if reddit_data:
         data["reddit"] = reddit_data
+        data["reddit_fetched"] = datetime.now(timezone.utc).isoformat(timespec="minutes")
+        print(f"  Reddit: {sum(len(s['posts']) for s in reddit_data)} posts")
     else:
-        # Preserve existing reddit data from data.json (Reddit blocks datacenter IPs)
-        try:
-            if os.path.isfile(DATA_JSON_PATH):
-                with open(DATA_JSON_PATH) as _f:
-                    existing = json.load(_f)
-                data["reddit"] = existing.get("reddit", [])
-                if data["reddit"]:
-                    print("  Reddit: kept existing data (live fetch failed)")
-        except Exception:
-            data["reddit"] = []
+        data["reddit"], data["reddit_fetched"] = load_fresh_reddit()
+        print("  Reddit: live fetch failed, " + ("kept snapshot from " + data["reddit_fetched"] if data["reddit"] else "no recent snapshot"))
 
     reports = []
     if os.path.isdir(PRED_DIR):

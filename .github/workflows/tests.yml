@@ -1,0 +1,23 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths: ['findata/**', 'examples/**', 'tests/**', '.github/workflows/tests.yml']
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install yfinance requests pandas ccxt pycoingecko pytest
+
+      - name: Run tests (offline; network calls are faked)
+        run: pytest -q

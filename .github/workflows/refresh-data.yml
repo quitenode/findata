@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+# A newer refresh supersedes one still waiting to start
+concurrency:
+  group: ${{ github.workflow }}
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -30,4 +34,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/data.json docs/predictions/
           git commit -m "data: refresh $(date -u +%H:%M) UTC" || exit 0
-          git push
+          # Daily Prediction may have pushed meanwhile; on a data.json clash keep this run's snapshot
+          for i in 1 2 3; do git pull --rebase -X theirs && git push && exit 0; sleep 10; done
+          exit 1

@@ -126,7 +126,8 @@ print(tickers)
 - `search_subreddit(subreddit, query, sort, time_filter)` -- search within sub
 - `get_post_comments(permalink, limit)` -- top-level comments
 - `extract_ticker_mentions(posts, min_mentions)` -- extract stock tickers from titles
-- `scan_multiple_subreddits(subreddits, limit_per_sub)` -- aggregate across subs
+- `scan_multiple_subreddits(subreddits, limit_per_sub)` -- aggregate across subs (one multireddit request)
+- `detect_themes(titles, min_posts)` -- macro themes (oil, Fed/rates, AI/tech, ...) mentioned in titles
 
 ### macro (FRED)
 
@@ -226,6 +227,7 @@ Live site (GitHub Pages from the `docs/` folder on `main`): **https://quitenode.
 - Live price ticker (BTC, ETH, SOL, SPY, QQQ, NVDA) -- updates every 30 seconds
 - Charts, sector heatmap, Reddit sentiment
 - Daily prediction reports (EN/CN toggle)
+- Phones are redirected to a reading view, [`m.html`](https://quitenode.github.io/findata/m.html), which can be added to the home screen
 
 ### Automation (GitHub Actions)
 
@@ -236,10 +238,21 @@ Live site (GitHub Pages from the `docs/` folder on `main`): **https://quitenode.
 
 All times are Pacific Time. Reports are saved to `predictions/YYYY-MM-DD/`.
 
+The Telegram step in Daily Prediction runs only when the `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` repository secrets are set.
+
+## Tests
+
+```bash
+pip install pytest
+pytest -q
+```
+
+The tests are offline (network calls are faked) and run on every pull request.
+
 ## Notes
 
 - The crypto module defaults to **OKX** as the exchange. Pass `exchange="bybit"` or `exchange="kraken"` to use others. Binance may be geo-blocked depending on location.
-- Reddit's public JSON API has no official rate limit but be polite -- the module enforces 1 request/second.
+- Reddit answers many `.json` requests with 403 (datacenter and corporate IPs). The module then falls back to the subreddit's RSS feed, which has titles and links but no scores or comment counts, and allows only about one request per minute. The dashboard keeps a Reddit snapshot for at most 48 hours when a fetch fails.
 - SEC EDGAR rate limit is 10 requests/second.
 - FMP uses the new `/stable/` endpoints (old `/api/v3/` deprecated 2025-08-31).
 - OANDA uses practice environment by default (real-time prices, virtual balance).

@@ -121,15 +121,21 @@ def get_news(ticker: str) -> list[dict]:
     """Get recent news headlines for a ticker."""
     t = yf.Ticker(ticker)
     news = t.news or []
+    if not news:
+        # Ticker.news has returned [] since Yahoo changed the quote-page feed;
+        # the search endpoint still works. Prefer items tagged with this ticker first.
+        hits = yf.Search(ticker, news_count=20).news or []
+        news = sorted(hits, key=lambda n: (n.get("relatedTickers") or [None])[0] != ticker)
     results = []
     for item in news[:15]:
+        # Two shapes: nested {"content": {provider, canonicalUrl, ...}} and flat {publisher, link, ...}
         c = item.get("content") or item
-        provider = c.get("provider", {})
+        provider = c.get("provider") or {}
         canon = c.get("canonicalUrl") or c.get("clickThroughUrl") or {}
         results.append({
             "title": c.get("title") or item.get("title", ""),
-            "publisher": provider.get("displayName") if isinstance(provider, dict) else (c.get("publisher") or item.get("publisher", "")),
-            "link": canon.get("url") if isinstance(canon, dict) else (c.get("link") or item.get("link", "")),
+            "publisher": provider.get("displayName") if isinstance(provider, dict) and provider else (c.get("publisher") or ""),
+            "link": canon.get("url") if isinstance(canon, dict) and canon else (c.get("link") or ""),
             "published": c.get("pubDate") or item.get("providerPublishTime", ""),
             "type": c.get("contentType") or item.get("type", ""),
         })

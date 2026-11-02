@@ -309,6 +309,7 @@ details > summary::-webkit-details-marker { display: none; }
 
   <section class="view" id="v-buzz">
     <h1 class="large-title" data-i="Reddit Buzz"></h1>
+    <div class="subtitle" id="buzzAsOf"></div>
     <div class="section-h" style="margin-top:12px"><h2 data-i="Most Mentioned"></h2></div>
     <div class="chips" id="mentions"></div>
     <div id="subs"></div>
@@ -349,6 +350,7 @@ const I18N = {
   'Bollinger': '布林带', 'Overall': '综合',
   'BTC On-Chain': 'BTC 链上指标', 'Bullish': '看涨', 'Bearish': '看跌', 'Neutral': '中性',
   'Reddit Buzz': 'Reddit 热议', 'Most Mentioned': '提及最多', 'comments': '评论',
+  'As of': '截至', 'No recent Reddit data': '暂无近期 Reddit 数据', 'News': '新闻',
   'Report not available': '报告暂不可用', 'Could not load data': '无法加载数据',
   'Swipe tables sideways': '表格可左右滑动', '1 month': '1个月', '30 days': '30天',
   'Buy': '买入', 'Sell': '卖出', 'Strong Buy': '强力买入', 'Strong Sell': '强力卖出', 'Hold': '持有',
@@ -410,7 +412,7 @@ async function loadData() {
     DATA = {
       generated: d.generated || '', indices: arr(d.indices), megacaps: arr(d.megacaps), all_stocks: arr(d.all_stocks),
       sectors: arr(d.sectors), commodities: arr(d.commodities), crypto: arr(d.crypto), crypto_indicators: arr(d.crypto_indicators),
-      reddit: arr(d.reddit), reports: arr(d.reports).filter(x => x && x.date).sort((a, b) => b.date.localeCompare(a.date)),
+      reddit: arr(d.reddit), reddit_fetched: d.reddit_fetched || null, reports: arr(d.reports).filter(x => x && x.date).sort((a, b) => b.date.localeCompare(a.date)),
       fear_greed: d.fear_greed && typeof d.fear_greed === 'object' ? d.fear_greed : null,
     };
     STOCKS = new Map(DATA.all_stocks.map(s => [s.ticker, s]));
@@ -591,13 +593,18 @@ function stockDetail(s) {
       ${kv(t('Target'), `${fUsd(an.target_mean)} <span class="${dir(an.target_mean - s.price)}">(${fPct((an.target_mean / s.price - 1) * 100)})</span>`)}
       ${kv(`${t('Low')} / ${t('High')}`, `${fUsd(an.target_low)} / ${fUsd(an.target_high)}`)}
       ${ok(an.num_analysts) ? kv('#', `${an.num_analysts} ${t('analysts')}`) : ''}</div>` : '';
+  const when = p => { const d = new Date(typeof p === 'number' ? p * 1000 : p); return isNaN(d) ? '' : d.toLocaleDateString(LANG === 'cn' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' }); };
+  const news = arr(s.news).filter(n => n.title).slice(0, 6);
+  const newsHtml = news.length ? `<div class="section-h"><h2>${t('News')}</h2></div><div class="card">${news.map(n =>
+    `<a class="post" href="${esc(n.link || '#')}" target="_blank" rel="noopener"><div class="pt">${esc(n.title)}</div>
+      <div class="pm">${[esc(n.publisher || ''), when(n.published)].filter(Boolean).join(' · ')}</div></a>`).join('')}</div>` : '';
   const sym = encodeURIComponent(s.ticker);
   return `<div class="d-head"><div class="tk">${esc(s.ticker)}</div><div class="nm">${esc(s.name || '')}${s.industry ? ' · ' + esc(s.industry) : ''}</div></div>
     <div class="d-price num">${fUsd(s.price)}</div>
     <div class="d-chg num ${dir(s.change_pct)}">${fPct(s.change_pct)}</div>
     ${chartBlock(s.history, s.dates, fUsd, t('1 month'))}
     <div class="card pad" style="margin-top:12px"><div class="grid2">${stats}</div>${range}</div>
-    ${tech}${analyst}
+    ${tech}${analyst}${newsHtml}
     <div class="ext"><a href="https://finance.yahoo.com/quote/${sym}" target="_blank" rel="noopener">Yahoo Finance ↗</a><a href="https://www.tradingview.com/symbols/${sym}/" target="_blank" rel="noopener">TradingView ↗</a></div>`;
 }
 
@@ -681,11 +688,21 @@ function renderBuzz() {
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 16);
   document.getElementById('mentions').innerHTML = top.map(([tk, c]) =>
     `<span class="chip${STOCKS.has(tk) ? ' tap" data-stock="' + esc(tk) : ''}">${esc(tk)}<small>${c}</small></span>`).join('') || `<span class="subtitle">—</span>`;
-  document.getElementById('subs').innerHTML = DATA.reddit.map(sub => `
+  const asOf = DATA.reddit_fetched ? new Date(DATA.reddit_fetched) : null;
+  document.getElementById('buzzAsOf').textContent = asOf && !isNaN(asOf)
+    ? `${t('As of')} ${asOf.toLocaleString(LANG === 'cn' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : '';
+  // Scores and comment counts are null when the pipeline fell back to Reddit's RSS feed
+  const meta = p => {
+    const m = [ok(p.score) ? `<span class="${p.score > 200 ? 'up' : ''}">▲ ${p.score}</span>` : '',
+      ok(p.comments) ? `${p.comments} ${t('comments')}` : ''].filter(Boolean).join(' · ')
+      + (p.flair && p.flair !== 'nan' ? `<span class="flair">${esc(p.flair)}</span>` : '');
+    return m ? `<div class="pm num">${m}</div>` : '';
+  };
+  document.getElementById('subs').innerHTML = DATA.reddit.length ? DATA.reddit.map(sub => `
     <div class="section-h"><h2>r/${esc(sub.subreddit)}</h2></div>
     <div class="card">${arr(sub.posts).map(p => `<a class="post" href="${esc(p.url || '#')}" target="_blank" rel="noopener">
-      <div class="pt">${esc(p.title)}</div>
-      <div class="pm num"><span class="${p.score > 200 ? 'up' : ''}">▲ ${p.score}</span> · ${p.comments} ${t('comments')}${p.flair && p.flair !== 'nan' ? `<span class="flair">${esc(p.flair)}</span>` : ''}</div></a>`).join('')}</div>`).join('');
+      <div class="pt">${esc(p.title)}</div>${meta(p)}</a>`).join('')}</div>`).join('')
+    : `<div class="card" style="margin-top:16px"><div class="empty">${t('No recent Reddit data')}</div></div>`;
 }
 
 // ---- Report ----
